@@ -119,7 +119,7 @@ def sql_rag_chain(question: str, history: list[dict] | None = None) -> str:
       3. Execute → pass result to LLM → NL answer (Llama 3.3 70B)
     """
     settings = get_settings()
-    client = Groq(api_key=settings.groq_api_key)
+    client = Groq(api_key=settings.groq_api_key.strip())
 
     db_path = str(
         Path(__file__).parent.parent.parent / settings.sqlite_db_path
@@ -145,7 +145,7 @@ def sql_rag_chain(question: str, history: list[dict] | None = None) -> str:
 
         with logfire_span("sql_rag.generate_sql_llm"):
             nl2sql_response = client.chat.completions.create(
-                model=settings.model_generation,  # 70B for NL→SQL quality
+                model=settings.model_generation.strip(),  # 70B for NL→SQL quality
                 messages=nl2sql_messages,
                 temperature=0,
                 max_tokens=512,
@@ -194,7 +194,7 @@ def sql_rag_chain(question: str, history: list[dict] | None = None) -> str:
 
         with logfire_span("sql_rag.synthesize_answer_llm"):
             answer_response = client.chat.completions.create(
-                model=settings.model_generation,
+                model=settings.model_generation.strip(),
                 messages=answer_messages,
                 temperature=0.2,
                 max_tokens=512,

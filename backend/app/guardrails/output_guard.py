@@ -78,11 +78,11 @@ async def check_output(
         from app.config import get_settings
 
         settings = get_settings()
-        client = AsyncGroq(api_key=settings.groq_api_key)
+        client = AsyncGroq(api_key=settings.groq_api_key.strip())
 
         context_snippet = "\n---\n".join(chunks[:3])[:2500]  # cap context size
         response = await client.chat.completions.create(
-            model=settings.model_cheap,  # 8B — fast & cheap
+            model=settings.model_cheap.strip(),  # 8B — fast & cheap
             messages=[
                 {
                     "role": "system",
@@ -197,7 +197,7 @@ async def verify_and_prune_citations(
             from app.config import get_settings
 
             settings = get_settings()
-            client = AsyncGroq(api_key=settings.groq_api_key)
+            client = AsyncGroq(api_key=settings.groq_api_key.strip())
 
             # Build compact verification prompt
             verification_blocks = []
@@ -217,7 +217,7 @@ async def verify_and_prune_citations(
             )
 
             resp = await client.chat.completions.create(
-                model=settings.model_cheap,
+                model=settings.model_cheap.strip(),
                 messages=[
                     {
                         "role": "system",

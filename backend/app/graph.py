@@ -218,7 +218,7 @@ async def node_router(state: ChatState) -> dict:
 
             try:
                 response = await client.chat.completions.create(
-                    model=settings.model_cheap,
+                    model=settings.model_cheap.strip(),
                     messages=router_messages,
                     temperature=0,
                     max_tokens=256,
@@ -276,7 +276,7 @@ async def node_document_rag(state: ChatState) -> dict:
                 rewrite_messages.extend(recent_history)
                 rewrite_messages.append({"role": "user", "content": question})
                 rewrite_resp = await rewrite_client.chat.completions.create(
-                    model=settings.model_cheap,
+                    model=settings.model_cheap.strip(),
                     messages=rewrite_messages,
                     temperature=0,
                     max_tokens=256,
@@ -355,12 +355,12 @@ async def node_document_rag(state: ChatState) -> dict:
         # Generate answer with 70B model
         logfire_info(
             "Dispatching generation prompt to {model} (context_chunks={chunks})",
-            model=settings.model_generation,
+            model=settings.model_generation.strip(),
             chunks=len(top_chunks),
         )
-        client = AsyncGroq(api_key=settings.groq_api_key, timeout=20.0)
+        client = AsyncGroq(api_key=settings.groq_api_key.strip(), timeout=20.0)
         response = await client.chat.completions.create(
-            model=settings.model_generation,
+            model=settings.model_generation.strip(),
             messages=gen_messages,
             temperature=0.2,
             max_tokens=1024,
