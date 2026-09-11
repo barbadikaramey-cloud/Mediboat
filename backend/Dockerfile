@@ -28,12 +28,16 @@ COPY --from=builder /app/.venv /app/.venv
 COPY app/ ./app/
 COPY data/ ./data/
 
+# Activate venv by prepending to PATH
+ENV PATH="/app/.venv/bin:$PATH"
+ENV FASTEMBED_CACHE_PATH="/app/.fastembed_cache"
+
+# Pre-download embedding models during build so container starts with zero network delay
+RUN python -c "from fastembed import TextEmbedding, SparseTextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5'); SparseTextEmbedding('Qdrant/bm25')"
+
 # Non-root user for security
 RUN useradd --create-home appuser && chown -R appuser /app
 USER appuser
-
-# Activate venv by prepending to PATH
-ENV PATH="/app/.venv/bin:$PATH"
 
 EXPOSE 8000
 
