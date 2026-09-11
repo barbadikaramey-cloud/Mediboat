@@ -32,13 +32,14 @@ COPY data/ ./data/
 ENV PATH="/app/.venv/bin:$PATH"
 ENV FASTEMBED_CACHE_PATH="/app/.fastembed_cache"
 
-# Pre-download embedding models during build so container starts with zero network delay
-RUN python -c "from fastembed import TextEmbedding, SparseTextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5'); SparseTextEmbedding('Qdrant/bm25')"
+# Pre-download embedding models during build into /app/.fastembed_cache
+RUN python -c "from fastembed import TextEmbedding, SparseTextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5', cache_dir='/app/.fastembed_cache'); SparseTextEmbedding('Qdrant/bm25', cache_dir='/app/.fastembed_cache')"
 
-# Non-root user for security
-RUN useradd --create-home appuser && chown -R appuser /app
+# Non-root user for security — ensure appuser owns /app and the cached models
+RUN useradd --create-home appuser && chown -R appuser:appuser /app
 USER appuser
 
 EXPOSE 8000
 
 CMD ["sh", "-c", "python data/seed_db.py && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1 --log-level info"]
+

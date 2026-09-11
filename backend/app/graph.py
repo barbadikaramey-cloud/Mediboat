@@ -205,7 +205,7 @@ async def node_router(state: ChatState) -> dict:
         else:
             # 2. LLM classifier with sufficient tokens (256) so reasoning tokens don't eat content
             settings = get_settings()
-            client = AsyncGroq(api_key=settings.groq_api_key)
+            client = AsyncGroq(api_key=settings.groq_api_key, timeout=20.0)
 
             recent_history = [
                 {"role": h["role"], "content": h["content"]}
@@ -271,7 +271,7 @@ async def node_document_rag(state: ChatState) -> dict:
         ]
         if recent_history:
             try:
-                rewrite_client = AsyncGroq(api_key=settings.groq_api_key)
+                rewrite_client = AsyncGroq(api_key=settings.groq_api_key, timeout=15.0)
                 rewrite_messages = [{"role": "system", "content": _CONTEXTUALIZE_SYSTEM}]
                 rewrite_messages.extend(recent_history)
                 rewrite_messages.append({"role": "user", "content": question})
@@ -358,7 +358,7 @@ async def node_document_rag(state: ChatState) -> dict:
             model=settings.model_generation,
             chunks=len(top_chunks),
         )
-        client = AsyncGroq(api_key=settings.groq_api_key)
+        client = AsyncGroq(api_key=settings.groq_api_key, timeout=20.0)
         response = await client.chat.completions.create(
             model=settings.model_generation,
             messages=gen_messages,

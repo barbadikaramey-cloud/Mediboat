@@ -10,6 +10,8 @@ if os.name == "nt" and Path("D:/").exists():
     os.environ.setdefault("FASTEMBED_CACHE_PATH", "D:/fastembed_cache")
     os.environ.setdefault("TEMP", "D:/temp")
     os.environ.setdefault("TMP", "D:/temp")
+else:
+    os.environ.setdefault("FASTEMBED_CACHE_PATH", "/app/.fastembed_cache")
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 

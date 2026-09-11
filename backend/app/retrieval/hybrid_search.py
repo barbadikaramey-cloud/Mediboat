@@ -39,19 +39,22 @@ _sparse_model: SparseTextEmbedding | None = None
 def _get_dense_model() -> TextEmbedding:
     global _dense_model
     if _dense_model is None:
+        import os
         settings = get_settings()
         logger.info("Loading dense embedding model: %s", settings.embed_model)
-        # A single ONNX thread avoids large arena allocations on small
-        # Windows development machines.
-        _dense_model = TextEmbedding(settings.embed_model, threads=1)
+        cache_path = os.environ.get("FASTEMBED_CACHE_PATH")
+        # A single ONNX thread avoids large arena allocations
+        _dense_model = TextEmbedding(settings.embed_model, cache_dir=cache_path, threads=1)
     return _dense_model
 
 
 def _get_sparse_model() -> SparseTextEmbedding:
     global _sparse_model
     if _sparse_model is None:
+        import os
         logger.info("Loading BM25 sparse model")
-        _sparse_model = SparseTextEmbedding("Qdrant/bm25", threads=1)
+        cache_path = os.environ.get("FASTEMBED_CACHE_PATH")
+        _sparse_model = SparseTextEmbedding("Qdrant/bm25", cache_dir=cache_path, threads=1)
     return _sparse_model
 
 
