@@ -1,0 +1,126 @@
+[
+  {
+    "role": "doctor",
+    "question": "What are the treatment protocols for acute myocardial infarction?",
+    "ground_truth": "For acute MI, administer aspirin, perform ECG within 10 minutes, initiate anticoagulation, and target door-to-balloon time under 90 minutes for STEMI.",
+    "collection": "clinical"
+  },
+  {
+    "role": "doctor",
+    "question": "What is the recommended dosage adjustment for vancomycin in renal impairment?",
+    "ground_truth": "Vancomycin requires dose interval extension in renal impairment; in dialysis patients, load 25 mg/kg and redose based on drug levels.",
+    "collection": "clinical"
+  },
+  {
+    "role": "doctor",
+    "question": "What are the diagnostic criteria for septic shock?",
+    "ground_truth": "Septic shock is defined as sepsis with vasopressor requirement and lactate greater than 2 mmol/L despite adequate fluid resuscitation.",
+    "collection": "clinical"
+  },
+  {
+    "role": "doctor",
+    "question": "What drugs are included in guideline-directed medical therapy for heart failure with reduced ejection fraction?",
+    "ground_truth": "GDMT for HFrEF includes an ACE inhibitor or ARNI, a beta-blocker such as carvedilol, a mineralocorticoid receptor antagonist, and an SGLT2 inhibitor.",
+    "collection": "clinical"
+  },
+  {
+    "role": "nurse",
+    "question": "What are the standard ICU nursing procedures for ventilated patients?",
+    "ground_truth": "ICU nursing procedures for ventilated patients include regular assessment of ventilator settings, oral care, head-of-bed elevation, and documentation of tidal volumes.",
+    "collection": "nursing"
+  },
+  {
+    "role": "nurse",
+    "question": "What infection control measures should be followed when handling MRSA patients?",
+    "ground_truth": "Contact precautions must be observed for MRSA patients including gloves and gown use, dedicated equipment, and hand hygiene with alcohol-based rub or soap and water.",
+    "collection": "nursing"
+  },
+  {
+    "role": "nurse",
+    "question": "How should a nurse respond to a patient with blood glucose below 54 mg/dL who is unconscious?",
+    "ground_truth": "Administer glucagon 1 mg IM and call the rapid response team if there is no improvement within 10 minutes.",
+    "collection": "clinical"
+  },
+  {
+    "role": "nurse",
+    "question": "What is the leave policy for nursing staff?",
+    "ground_truth": "The leave policy outlines annual leave entitlements, sick leave provisions, and procedures for applying for leave through the HR portal.",
+    "collection": "general"
+  },
+  {
+    "role": "billing_executive",
+    "question": "How do I submit a reimbursement claim for a patient treated under New India Assurance?",
+    "ground_truth": "Submit the claim with the completed claim form, ICD-10 diagnosis code, bills, and discharge summary through the insurer portal or postal submission within the stipulated timeline.",
+    "collection": "billing"
+  },
+  {
+    "role": "billing_executive",
+    "question": "What are the common reasons for claim rejection?",
+    "ground_truth": "Claims are commonly rejected due to incomplete documentation, incorrect diagnosis codes, policy lapse at the time of treatment, or duplicate claim submission.",
+    "collection": "billing"
+  },
+  {
+    "role": "billing_executive",
+    "question": "How many claims were escalated last month?",
+    "ground_truth": "SQL query on claims table filtering by status=escalated and submitted_date in the previous calendar month.",
+    "collection": "billing",
+    "is_sql": true
+  },
+  {
+    "role": "billing_executive",
+    "question": "What is the average claimed amount by department?",
+    "ground_truth": "SQL aggregation on claims table: SELECT department, AVG(claimed_amount) GROUP BY department.",
+    "collection": "billing",
+    "is_sql": true
+  },
+  {
+    "role": "technician",
+    "question": "What are the preventive maintenance steps for the MRI scanner?",
+    "ground_truth": "MRI preventive maintenance includes regular magnet checks, coil calibration, cryogen level monitoring, and cleaning of bore components per manufacturer schedule.",
+    "collection": "equipment"
+  },
+  {
+    "role": "technician",
+    "question": "What should a technician do when a fault code appears on the CT scanner?",
+    "ground_truth": "Record the fault code, check the equipment manual for the fault description, attempt the recommended reset procedure, and raise a maintenance ticket if unresolved.",
+    "collection": "equipment"
+  },
+  {
+    "role": "technician",
+    "question": "What is the code of conduct for MediAssist staff?",
+    "ground_truth": "The code of conduct covers professional behavior, patient confidentiality, conflict of interest policies, and disciplinary procedures.",
+    "collection": "general"
+  },
+  {
+    "role": "admin",
+    "question": "What is the top maintenance category by number of tickets?",
+    "ground_truth": "SQL aggregation on maintenance_tickets: SELECT category, COUNT(*) GROUP BY category ORDER BY COUNT(*) DESC LIMIT 1.",
+    "collection": "equipment",
+    "is_sql": true
+  },
+  {
+    "role": "admin",
+    "question": "How many open maintenance tickets exist for each equipment type?",
+    "ground_truth": "SQL: SELECT equipment_name, COUNT(*) FROM maintenance_tickets WHERE status='open' GROUP BY equipment_name.",
+    "collection": "equipment",
+    "is_sql": true
+  },
+  {
+    "role": "admin",
+    "question": "What are the staff leave entitlements?",
+    "ground_truth": "Staff are entitled to a specified number of annual, sick, and casual leave days as defined in the leave policy, varying by employment grade.",
+    "collection": "general"
+  },
+  {
+    "role": "doctor",
+    "question": "What antibiotics should be used for severe community-acquired pneumonia requiring ICU admission?",
+    "ground_truth": "For severe CAP requiring ICU admission, use a beta-lactam combined with azithromycin or a respiratory fluoroquinolone. Add MRSA coverage only if risk factors are present.",
+    "collection": "clinical"
+  },
+  {
+    "role": "nurse",
+    "question": "What is the procedure for hand hygiene in the ICU?",
+    "ground_truth": "Hand hygiene in the ICU should follow the WHO 5 moments protocol using alcohol-based hand rub for 20-30 seconds or soap and water for 40-60 seconds.",
+    "collection": "nursing"
+  }
+]

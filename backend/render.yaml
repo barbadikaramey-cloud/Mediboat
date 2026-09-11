@@ -1,0 +1,33 @@
+# ── Web service on Render free tier ───────────────────────────────────────────
+services:
+  - type: web
+    name: medibot-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /health
+
+    # All secrets pulled from Render's Environment Group (never committed)
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false
+      - key: UPSTASH_REDIS_URL
+        sync: false
+      - key: UPSTASH_REDIS_TOKEN
+        sync: false
+      - key: LOGFIRE_TOKEN
+        sync: false
+      - key: LANGCHAIN_API_KEY
+        sync: false
+      - key: LANGCHAIN_TRACING_V2
+        value: "true"
+      - key: LANGCHAIN_PROJECT
+        value: "medibot"
+      - key: JWT_SECRET_KEY
+        sync: false
+

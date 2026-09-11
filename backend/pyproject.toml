@@ -1,0 +1,74 @@
+    [project]
+name = "medibot-backend"
+version = "0.1.0"
+description = "MediBot RAG backend for MediAssist Health Network"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    # ── Core web framework ──────────────────────────────────────────────────
+    "fastapi==0.115.6",
+    "uvicorn[standard]==0.32.1",
+    "pydantic==2.9.2",
+    "pydantic-settings==2.7.0",
+    "python-multipart==0.0.20",
+    # ── Auth ────────────────────────────────────────────────────────────────
+    "python-jose[cryptography]==3.3.0",
+    "bcrypt==4.2.1",
+    # ── LLM / Orchestration ─────────────────────────────────────────────────
+    "groq==0.13.0",
+    "langchain==0.3.14",
+    "langchain-groq==0.2.3",
+    "langchain-community==0.3.14",
+    "langgraph==0.2.60",
+    # ── Vector DB ────────────────────────────────────────────────────────────
+    # Using qdrant-client WITHOUT the fastembed extra to avoid the pinning conflict.
+    # fastembed 0.4.2 uses mmh3 3.x which has pre-built Windows wheels (no MSVC needed).
+    "qdrant-client==1.13.0",
+    "fastembed==0.4.2",
+    # ── Reranker (local CPU) ─────────────────────────────────────────────────
+    "sentence-transformers==3.3.1",
+    # ── Document parsing & chunking ──────────────────────────────────────────
+    "docling==2.15.0",
+    # ── Relational DB ────────────────────────────────────────────────────────
+    "sqlalchemy==2.0.36",
+    # ── Cache (Upstash Redis REST) ───────────────────────────────────────────
+    "upstash-redis==1.1.0",
+    # ── Observability ────────────────────────────────────────────────────────
+    "logfire[fastapi]==2.9.0",
+    # Logfire 2.9.0 uses the pre-1.30 OpenTelemetry meter API.
+    "opentelemetry-api==1.29.0",
+    "opentelemetry-sdk==1.29.0",
+    "opentelemetry-exporter-otlp-proto-http==1.29.0",
+    "opentelemetry-instrumentation-fastapi==0.50b0",
+    "langsmith==0.2.10",
+    # ── Evaluation ───────────────────────────────────────────────────────────
+    "ragas==0.2.8",
+    "datasets==3.2.0",
+    # ── Utilities ────────────────────────────────────────────────────────────
+    "httpx==0.28.1",
+    "python-dotenv==1.0.1",
+    "importlib-metadata>=8.0.0",
+]
+
+[project.scripts]
+ingest = "app.ingestion.ingest:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.28",
+    "ruff>=0.8",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

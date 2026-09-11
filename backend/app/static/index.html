@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MediBot — MediAssist Health Network</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .scrollbar-thin::-webkit-scrollbar { width: 6px; }
+    .scrollbar-thin::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 3px; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen">
+
+  <!-- ==================== LOGIN VIEW ==================== -->
+  <div id="loginView" class="min-h-screen bg-gradient-to-br from-rose-950 via-slate-950 to-slate-900 flex items-center justify-center p-4">
+    <div class="w-full max-w-md">
+      <!-- Brand Header -->
+      <div class="text-center mb-8">
+        <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white/10 backdrop-blur border border-white/20 mb-4 shadow-xl">
+          <span class="text-3xl">🏥</span>
+        </div>
+        <h1 class="text-3xl font-bold text-white tracking-tight">Medi<span class="text-rose-400">Bot</span></h1>
+        <p class="text-rose-200 text-sm mt-1">MediAssist Health Network — Staff Portal</p>
+        <div class="inline-block mt-2 px-3 py-1 rounded-full bg-rose-500/20 border border-rose-400/30 text-rose-200 text-xs font-medium">
+          Role-Based Access Control (RBAC) Enforced
+        </div>
+      </div>
+
+      <!-- Login Card -->
+      <div class="bg-white rounded-2xl shadow-2xl p-8 border border-slate-100">
+        <h2 class="text-lg font-semibold text-slate-800 mb-4">Sign In to Your Account</h2>
+
+        <div id="loginError" class="hidden mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs font-medium"></div>
+
+        <form id="loginForm" class="space-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Username</label>
+            <input type="text" id="loginUsername" placeholder="e.g. dr.mehta" required
+              class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 transition-all" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Password</label>
+            <input type="password" id="loginPassword" placeholder="Same as role name" required
+              class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 transition-all" />
+          </div>
+          <button type="submit" id="loginBtn"
+            class="w-full bg-rose-600 hover:bg-rose-700 text-white font-medium py-2.5 rounded-lg text-sm transition-colors shadow-md shadow-rose-600/20">
+            Sign In
+          </button>
+        </form>
+
+        <!-- Discreet Demo Accounts Selector -->
+        <div class="mt-6 pt-5 border-t border-slate-100">
+          <button type="button" onclick="toggleDemoAccounts()" class="w-full flex items-center justify-between text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors py-1">
+            <span class="flex items-center gap-1.5 font-semibold text-slate-600 hover:text-blue-700">
+              ⚡ Test Role Quick-Select
+            </span>
+            <span id="demoToggleText" class="text-[11px] text-slate-400 font-medium">Show ▾</span>
+          </button>
+          <div id="demoAccountsContainer" class="hidden mt-3 bg-slate-50 border border-slate-200/80 rounded-2xl p-3 space-y-1.5">
+            <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5 px-1">Click to pre-fill credentials:</p>
+            <div class="space-y-1.5" id="demoAccounts">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <p class="text-center text-slate-400 text-xs mt-6">
+        Protected by Server-Side Retrieval Filtering &amp; Groq Llama 3.3
+      </p>
+    </div>
+  </div>
+
+  <!-- ==================== CHAT VIEW ==================== -->
+  <div id="chatView" class="hidden flex flex-col h-screen bg-slate-50">
+    <!-- Header -->
+    <header class="bg-white border-b border-slate-200 px-5 py-3.5 flex items-center justify-between shadow-sm">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-center text-xl shadow-sm">
+          🏥
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="font-bold text-slate-900 text-base">Medi<span class="text-rose-600">Bot</span></h1>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-rose-50 border border-rose-200 text-rose-700 font-medium">Live</span>
+          </div>
+          <p class="text-xs text-slate-500">MediAssist Health Network Staff Portal</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <!-- User Badge -->
+        <div class="text-right hidden sm:block">
+          <div class="text-xs font-bold text-slate-800" id="headerUsername">dr.mehta</div>
+          <div class="text-xs font-medium text-rose-600" id="headerRole">Doctor</div>
+        </div>
+
+        <!-- Collections Badge -->
+        <div class="flex flex-wrap gap-1" id="headerCollections">
+          <!-- Populated by JS -->
+        </div>
+
+        <button onclick="handleLogout()"
+          class="ml-2 text-xs font-medium text-slate-500 hover:text-slate-800 border border-slate-200 hover:bg-slate-50 rounded-lg px-2.5 py-1.5 transition-colors">
+          Sign Out
+        </button>
+      </div>
+    </header>
+
+    <!-- Chat Messages -->
+    <div id="messagesContainer" class="flex-1 overflow-y-auto px-4 py-6 space-y-4 scrollbar-thin">
+      <!-- Populated dynamically -->
+    </div>
+
+    <!-- Input Area -->
+    <div class="bg-white border-t border-slate-200 p-4 shadow-lg">
+      <div class="max-w-3xl mx-auto">
+        <!-- Suggestion Chips -->
+        <div class="flex gap-2 overflow-x-auto pb-2 scrollbar-thin text-xs" id="promptSuggestions">
+          <!-- Populated based on role -->
+        </div>
+
+        <form id="chatForm" class="flex gap-2 mt-1">
+          <textarea id="chatInput" rows="1" placeholder="Ask a clinical, administrative, or operational question..."
+            class="flex-1 border border-slate-300 rounded-xl px-4 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-rose-500 max-h-32 transition-all"></textarea>
+          <button type="submit" id="sendBtn"
+            class="bg-rose-600 hover:bg-rose-700 disabled:opacity-40 text-white rounded-xl px-5 py-2.5 text-sm font-medium transition-colors shadow-md shadow-rose-600/20 shrink-0">
+            Send
+          </button>
+        </form>
+        <p class="text-center text-xs text-slate-400 mt-2">
+          Shift+Enter for new line · RBAC enforced at vector DB layer · Session protected
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const DEMO_USERS = [
+      { username: 'dr.mehta', role: 'doctor', label: 'Dr. Mehta (Doctor)', collections: ['clinical', 'nursing', 'general'] },
+      { username: 'nurse.priya', role: 'nurse', label: 'Nurse Priya (Nurse)', collections: ['nursing', 'general'] },
+      { username: 'billing.ravi', role: 'billing_executive', label: 'Ravi (Billing Executive)', collections: ['billing', 'general'] },
+      { username: 'tech.anand', role: 'technician', label: 'Anand (Technician)', collections: ['equipment', 'general'] },
+      { username: 'admin.sys', role: 'admin', label: 'Sysadmin (Admin)', collections: ['clinical', 'nursing', 'billing', 'equipment', 'general'] },
+    ];
+
+    const COLLECTION_COLORS = {
+      clinical:  'bg-rose-100 text-rose-800 border-rose-200',
+      nursing:   'bg-emerald-100 text-emerald-800 border-emerald-200',
+      billing:   'bg-amber-100 text-amber-800 border-amber-200',
+      equipment: 'bg-purple-100 text-purple-800 border-purple-200',
+      general:   'bg-slate-100 text-slate-800 border-slate-200',
+    };
+
+    const ROLE_SUGGESTIONS = {
+      doctor: [
+        "What is the treatment protocol for acute STEMI?",
+        "What are the diagnostic criteria for septic shock?",
+        "What is the vancomycin dose in renal impairment?"
+      ],
+      nurse: [
+        "What are the ICU protocols for ventilated patients?",
+        "What are the infection control guidelines for MRSA?",
+        "What is the staff leave policy?"
+      ],
+      billing_executive: [
+        "How many claims have an escalated status?",
+        "What is the average claimed amount by department?",
+        "How do I submit an insurance reimbursement claim?"
+      ],
+      technician: [
+        "What are the maintenance steps for the MRI scanner?",
+        "What should I do if a fault code appears on the CT scanner?",
+        "What is the hospital code of conduct?"
+      ],
+      admin: [
+        "What is the top maintenance category by ticket count?",
+        "How many open maintenance tickets are there for each equipment?",
+        "How many claims have an escalated status?"
+      ]
+    };
+
+    let currentUser = null;
+    let token = null;
+
+    function toggleDemoAccounts() {
+      const container = document.getElementById('demoAccountsContainer');
+      const text = document.getElementById('demoToggleText');
+      if (container.classList.contains('hidden')) {
+        container.classList.remove('hidden');
+        text.innerText = 'Hide ▴';
+      } else {
+        container.classList.add('hidden');
+        text.innerText = 'Show ▾';
+      }
+    }
+
+    // Render demo buttons
+    const demoContainer = document.getElementById('demoAccounts');
+    DEMO_USERS.forEach(user => {
+      const btn = document.createElement('button');
+      btn.type = "button";
+      btn.className = "w-full text-left px-3 py-2 rounded-xl bg-white hover:bg-blue-50/70 border border-slate-200 transition-colors flex items-center justify-between group";
+      btn.innerHTML = `
+        <div class="flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full ${user.role === 'admin' ? 'bg-red-500' : user.role === 'doctor' ? 'bg-blue-500' : user.role === 'nurse' ? 'bg-emerald-500' : user.role === 'billing_executive' ? 'bg-amber-500' : 'bg-purple-500'}"></span>
+          <span class="text-xs font-bold text-slate-800">${user.label}</span>
+        </div>
+        <span class="text-[10px] text-slate-400 font-mono font-semibold">${user.username}</span>
+      `;
+      btn.onclick = () => selectDemoAccount(user.username, user.role);
+      demoContainer.appendChild(btn);
+    });
+
+    function selectDemoAccount(username, password) {
+      document.getElementById('loginUsername').value = username;
+      document.getElementById('loginPassword').value = password;
+      document.getElementById('loginError').classList.add('hidden');
+    }
+
+    document.getElementById('loginForm').onsubmit = (e) => {
+      e.preventDefault();
+      performLogin(
+        document.getElementById('loginUsername').value,
+        document.getElementById('loginPassword').value
+      );
+    };
+
+    async function performLogin(username, password) {
+      const errEl = document.getElementById('loginError');
+      const btn = document.getElementById('loginBtn');
+      errEl.classList.add('hidden');
+      btn.disabled = true;
+      btn.innerText = 'Signing In...';
+
+      try {
+        const res = await fetch('/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.detail || 'Login failed');
+        }
+        const data = await res.json();
+        token = data.access_token;
+        
+        // Decode JWT payload
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        currentUser = { username: payload.sub, role: payload.role };
+        
+        sessionStorage.setItem('medibot_token', token);
+        sessionStorage.setItem('medibot_user', JSON.stringify(currentUser));
+        
+        initChatView();
+      } catch (err) {
+        errEl.innerText = err.message;
+        errEl.classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+        btn.innerText = 'Sign In';
+      }
+    }
+
+    function initChatView() {
+      document.getElementById('loginView').classList.add('hidden');
+      document.getElementById('chatView').classList.remove('hidden');
+
+      document.getElementById('headerUsername').innerText = currentUser.username;
+      document.getElementById('headerRole').innerText = currentUser.role.replace('_', ' ').toUpperCase();
+
+      const userDef = DEMO_USERS.find(u => u.role === currentUser.role);
+      const colsContainer = document.getElementById('headerCollections');
+      colsContainer.innerHTML = '';
+      if (userDef) {
+        userDef.collections.forEach(col => {
+          const badge = document.createElement('span');
+          badge.className = `text-[10px] px-2 py-0.5 rounded-full font-medium border ${COLLECTION_COLORS[col] || 'bg-slate-100 text-slate-600'}`;
+          badge.innerText = col;
+          colsContainer.appendChild(badge);
+        });
+      }
+
+      // Suggestions
+      const suggContainer = document.getElementById('promptSuggestions');
+      suggContainer.innerHTML = '';
+      const suggestions = ROLE_SUGGESTIONS[currentUser.role] || [];
+      suggestions.forEach(s => {
+        const chip = document.createElement('button');
+        chip.className = "whitespace-nowrap px-3 py-1 rounded-full bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-600 border border-slate-200 transition-colors shrink-0";
+        chip.innerText = s;
+        chip.onclick = () => {
+          document.getElementById('chatInput').value = s;
+          sendMessage();
+        };
+        suggContainer.appendChild(chip);
+      });
+
+      // Initial welcome message
+      const messagesContainer = document.getElementById('messagesContainer');
+      messagesContainer.innerHTML = '';
+      appendMessage('assistant', `Hello **${currentUser.username}**! I am MediBot. You are logged in as **${currentUser.role}** with access to the following collection(s): **${(userDef ? userDef.collections : []).join(', ')}**.\n\nAsk me any questions, or click a suggestion chip below.`, null, 'system');
+    }
+
+    function appendMessage(role, text, sources, retrievalType) {
+      const container = document.getElementById('messagesContainer');
+      const row = document.createElement('div');
+      row.className = `flex ${role === 'user' ? 'justify-end' : 'justify-start'}`;
+
+      const card = document.createElement('div');
+      card.className = `max-w-2xl w-full ${role === 'user' ? 'ml-12' : 'mr-12'}`;
+
+      const bubble = document.createElement('div');
+      if (role === 'user') {
+        bubble.className = "bg-rose-600 text-white rounded-2xl rounded-br-sm px-4 py-3 text-sm shadow-md whitespace-pre-wrap leading-relaxed";
+      } else if (retrievalType === 'blocked') {
+        bubble.className = "bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl rounded-bl-sm px-4 py-3 text-sm shadow-sm whitespace-pre-wrap leading-relaxed";
+      } else {
+        bubble.className = "bg-white border border-slate-200 text-slate-800 rounded-2xl rounded-bl-sm px-4 py-3 text-sm shadow-sm whitespace-pre-wrap leading-relaxed";
+      }
+
+      // Convert markdown: bold, italic, code
+      let formattedText = text
+        .replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-slate-900">$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em class="italic text-slate-700">$1</em>')
+        .replace(/`([^`]+)`/g, '<code class="bg-rose-50 border border-rose-100 px-1.5 py-0.5 rounded text-xs text-rose-700 font-mono font-semibold">$1</code>');
+
+      // Table formatting
+      if (formattedText.includes('|')) {
+        const lines = formattedText.split('\n');
+        let inTable = false;
+        let tableHtml = '<div class="my-2.5 overflow-x-auto rounded-xl border border-slate-200 shadow-2xs"><table class="w-full text-left text-xs border-collapse">';
+        let newLines = [];
+
+        for (let idx = 0; idx < lines.length; idx++) {
+          const l = lines[idx].trim();
+          if (l.startsWith('|') && l.endsWith('|')) {
+            if (!inTable) {
+              inTable = true;
+              const cells = l.split('|').slice(1, -1).map(c => `<th class="py-2 px-3 font-bold bg-slate-100 text-slate-900 border-b border-slate-200">${c.trim()}</th>`).join('');
+              tableHtml += `<thead><tr>${cells}</tr></thead><tbody>`;
+            } else if (l.includes('---')) {
+              // skip separator
+            } else {
+              const cells = l.split('|').slice(1, -1).map(c => `<td class="py-1.5 px-3 border-b border-slate-100 font-medium text-slate-700">${c.trim()}</td>`).join('');
+              tableHtml += `<tr class="hover:bg-slate-50/70">${cells}</tr>`;
+            }
+          } else {
+            if (inTable) {
+              inTable = false;
+              tableHtml += '</tbody></table></div>';
+              newLines.push(tableHtml);
+              tableHtml = '<div class="my-2.5 overflow-x-auto rounded-xl border border-slate-200 shadow-2xs"><table class="w-full text-left text-xs border-collapse">';
+            }
+            newLines.push(lines[idx]);
+          }
+        }
+        if (inTable) {
+          tableHtml += '</tbody></table></div>';
+          newLines.push(tableHtml);
+        }
+        formattedText = newLines.join('\n');
+      }
+
+      bubble.innerHTML = formattedText;
+
+      card.appendChild(bubble);
+
+      // Meta badge
+      if (role === 'assistant' && retrievalType) {
+        const metaDiv = document.createElement('div');
+        metaDiv.className = "mt-1.5 flex items-center gap-2 text-[11px] text-slate-400";
+        
+        let typeBadge = "";
+        if (retrievalType === 'document_rag') typeBadge = "📄 Document RAG (Hybrid)";
+        else if (retrievalType === 'sql_rag') typeBadge = "🗃️ SQL RAG (Analytical)";
+        else if (retrievalType === 'blocked') typeBadge = "🚫 Guardrail / RBAC Blocked";
+        else typeBadge = retrievalType;
+
+        metaDiv.innerHTML = `<span>${typeBadge}</span> · <span>${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>`;
+        card.appendChild(metaDiv);
+      }
+
+      // Collapsible Source citations
+      if (sources && sources.length > 0) {
+        const srcContainer = document.createElement('div');
+        srcContainer.className = "mt-3 bg-slate-50 border border-slate-200 rounded-xl overflow-hidden shadow-2xs";
+        
+        const toggleBtn = document.createElement('button');
+        toggleBtn.type = "button";
+        toggleBtn.className = "w-full px-3.5 py-2 flex items-center justify-between text-xs font-bold text-slate-700 bg-slate-100/80 hover:bg-slate-100 transition-colors cursor-pointer";
+        toggleBtn.innerHTML = `
+          <span class="flex items-center gap-1.5 font-bold text-slate-800">
+            📑 Verified Reranked Sources (${sources.length} chunks)
+          </span>
+          <span class="text-[11px] font-semibold text-slate-500">Toggle ▾</span>
+        `;
+        
+        const listDiv = document.createElement('div');
+        listDiv.className = "hidden p-2.5 space-y-2";
+        toggleBtn.onclick = () => listDiv.classList.toggle('hidden');
+
+        sources.forEach((s, idx) => {
+          const item = document.createElement('div');
+          item.className = "text-xs bg-white p-2.5 rounded-lg border border-slate-200/80 shadow-2xs space-y-1.5";
+          item.innerHTML = `
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-1.5 overflow-hidden">
+                <span class="text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase ${COLLECTION_COLORS[s.collection] || 'bg-slate-100'}">${s.collection}</span>
+                <span class="font-bold text-slate-900 truncate">${s.document}</span>
+                ${s.page_number ? `<span class="text-[10px] text-slate-500 bg-slate-100 px-1 rounded font-medium">Page ${s.page_number}</span>` : ''}
+              </div>
+              ${s.score != null ? `<span class="text-[10px] text-rose-700 font-mono font-bold bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded shrink-0">CE: ${s.score.toFixed(3)}</span>` : ''}
+            </div>
+            ${s.section ? `<div class="text-[11px] text-slate-600 font-medium truncate">Section: <strong class="text-slate-800 font-bold">${s.section}</strong></div>` : ''}
+            ${s.text ? `<details class="mt-1 text-[11px] text-slate-600 cursor-pointer"><summary class="font-semibold text-rose-600 hover:text-rose-800">Inspect retrieved excerpt</summary><div class="mt-1.5 p-2 bg-slate-50 rounded border-l-2 border-rose-600 text-slate-800 text-[11px] whitespace-pre-wrap leading-relaxed font-sans">${s.text}</div></details>` : ''}
+          `;
+          listDiv.appendChild(item);
+        });
+
+        srcContainer.appendChild(toggleBtn);
+        srcContainer.appendChild(listDiv);
+        card.appendChild(srcContainer);
+      }
+
+      row.appendChild(card);
+      container.appendChild(row);
+      container.scrollTop = container.scrollHeight;
+    }
+
+    document.getElementById('chatForm').onsubmit = (e) => {
+      e.preventDefault();
+      sendMessage();
+    };
+
+    let chatHistory = [];
+
+    async function sendMessage() {
+      const input = document.getElementById('chatInput');
+      const question = input.value.trim();
+      if (!question || !token) return;
+
+      appendMessage('user', question);
+      input.value = '';
+
+      const sendBtn = document.getElementById('sendBtn');
+      sendBtn.disabled = true;
+      sendBtn.innerText = 'Thinking...';
+
+      const historyPayload = chatHistory.slice(-6);
+      chatHistory.push({ role: 'user', content: question });
+
+      try {
+        const res = await fetch('/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ question, history: historyPayload })
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.detail || 'Request failed');
+        }
+
+        const data = await res.json();
+        chatHistory.push({ role: 'assistant', content: data.answer });
+        appendMessage('assistant', data.answer, data.sources, data.retrieval_type);
+      } catch (err) {
+        appendMessage('assistant', `⚠️ ${err.message}`, null, 'blocked');
+      } finally {
+        sendBtn.disabled = false;
+        sendBtn.innerText = 'Send';
+      }
+    }
+
+    function handleLogout() {
+      sessionStorage.clear();
+      token = null;
+      currentUser = null;
+      document.getElementById('chatView').classList.add('hidden');
+      document.getElementById('loginView').classList.remove('hidden');
+    }
+
+    // Check existing session
+    const savedToken = sessionStorage.getItem('medibot_token');
+    const savedUser = sessionStorage.getItem('medibot_user');
+    if (savedToken && savedUser) {
+      token = savedToken;
+      currentUser = JSON.parse(savedUser);
+      initChatView();
+    }
+  </script>
+</body>
+</html>
+
