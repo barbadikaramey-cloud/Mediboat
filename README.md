@@ -1,3 +1,13 @@
+---
+title: MediBot
+emoji: 🏥
+colorFrom: red
+colorTo: blue
+sdk: gradio
+app_file: run.py
+pinned: false
+---
+
 <div align="center">
 
 # 🏥 MediBot: Enterprise Healthcare AI Knowledge Platform
