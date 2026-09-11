@@ -30,4 +30,8 @@ services:
         value: "medibot"
       - key: JWT_SECRET_KEY
         sync: false
+      - key: MODEL_GENERATION
+        value: "openai/gpt-oss-120b"
+      - key: MODEL_CHEAP
+        value: "openai/gpt-oss-20b"
 

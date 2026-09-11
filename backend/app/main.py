@@ -34,10 +34,11 @@ async def lifespan(app: FastAPI):
             with logfire_span("startup.model_warmup"):
                 logfire_info("Background model pre-warming started...")
                 from app.retrieval.hybrid_search import _get_dense_model, _get_sparse_model
-                from app.retrieval.rerank import _get_cross_encoder
                 _get_dense_model()
                 _get_sparse_model()
-                _get_cross_encoder()
+                if get_settings().use_cross_encoder:
+                    from app.retrieval.rerank import _get_cross_encoder
+                    _get_cross_encoder()
                 logfire_info("Background model pre-warming complete! Cold-start latency eliminated.")
         except Exception as exc:
             logger.warning("Background warmup notice: %s", exc)

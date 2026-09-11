@@ -30,3 +30,7 @@ services:
         value: "true"
       - key: LANGCHAIN_PROJECT
         value: "medibot"
+      - key: MODEL_GENERATION
+        value: "openai/gpt-oss-120b"
+      - key: MODEL_CHEAP
+        value: "openai/gpt-oss-20b"

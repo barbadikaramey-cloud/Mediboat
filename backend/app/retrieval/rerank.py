@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 
-from sentence_transformers import CrossEncoder
+from typing import Any
 
 from app.config import get_settings
 from app.observability import logfire_info, logfire_span
@@ -20,12 +20,13 @@ from app.retrieval.hybrid_search import RetrievedChunk
 logger = logging.getLogger(__name__)
 
 # Module-level singleton — loaded once, reused across all requests
-_cross_encoder: CrossEncoder | None = None
+_cross_encoder: Any | None = None
 
 
-def _get_cross_encoder() -> CrossEncoder:
+def _get_cross_encoder() -> Any:
     global _cross_encoder
     if _cross_encoder is None:
+        from sentence_transformers import CrossEncoder
         settings = get_settings()
         logger.info("Loading CrossEncoder: %s", settings.reranker_model)
         # Explicitly disable low_cpu_mem_usage to prevent meta-tensor loading
@@ -48,7 +49,7 @@ def rerank(
     top_n: int | None = None,
     **kwargs,
 ) -> list[RetrievedChunk]:
-    """Rerank retrieved chunks using CrossEncoder; return top_n reranked chunks without floor filtering.
+    """Rerank retrieved chunks using CrossEncoder or native Qdrant RRF scores.
     Relevance, factuality, and refusal decisions are strictly enforced by the downstream NLI prompts.
 
     Args:
@@ -57,13 +58,24 @@ def rerank(
         top_n:  Number of top reranked chunks to return (default: settings.rerank_top_n).
 
     Returns:
-        List of RetrievedChunk sorted by CrossEncoder score desc, truncated to top_n.
+        List of RetrievedChunk sorted by score desc, truncated to top_n.
     """
     settings = get_settings()
     n = top_n or settings.rerank_top_n
 
     if not chunks:
         return []
+
+    if not settings.use_cross_encoder:
+        # High-efficiency path for 512MB RAM containers (Render free tier):
+        # Qdrant native Reciprocal Rank Fusion (RRF) has already scored and sorted candidates.
+        # Avoids loading PyTorch (~400MB RAM), keeping memory under 240MB and eliminating OOM crashes.
+        logfire_info(
+            "Using Qdrant native RRF ranking ({candidates} candidates -> top {kept})",
+            candidates=len(chunks),
+            kept=min(n, len(chunks)),
+        )
+        return chunks[:n]
 
     with logfire_span(
         "retrieval.cross_encoder_rerank",

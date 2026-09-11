@@ -3,7 +3,7 @@
  * All requests include the JWT bearer token from localStorage.
  */
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000').replace(/\/+$/, '')
 
 export interface LoginResponse {
   access_token: string
@@ -36,16 +36,36 @@ export interface CollectionsResponse {
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 export async function login(username: string, password: string): Promise<LoginResponse> {
-  const res = await fetch(`${API_URL}/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password }),
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.detail ?? 'Invalid credentials')
+  let res: Response
+  try {
+    res = await fetch(`${API_URL}/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    })
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    throw new Error(`Cannot reach backend at ${API_URL}: ${msg}. Check your backend status and CORS.`)
   }
-  return res.json()
+
+  const rawText = await res.text()
+  let data: Record<string, unknown> = {}
+  try {
+    data = rawText ? JSON.parse(rawText) : {}
+  } catch {
+    // rawText is not JSON (e.g. HTML error page or 502 Bad Gateway)
+  }
+
+  if (!res.ok) {
+    const detail = typeof data.detail === 'string' ? data.detail : null
+    throw new Error(detail ?? `Backend returned HTTP ${res.status} (${res.statusText || 'Error'}): ${rawText.slice(0, 150)}`)
+  }
+
+  if (!data.access_token) {
+    throw new Error(`Unexpected response from ${API_URL}/login: received empty or invalid token payload.`)
+  }
+
+  return data as unknown as LoginResponse
 }
 
 // ── Chat ─────────────────────────────────────────────────────────────────────
@@ -59,19 +79,35 @@ export async function chat(
   token: string,
   history: HistoryMessage[] = [],
 ): Promise<ChatResponse> {
-  const res = await fetch(`${API_URL}/chat`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ question, history }),
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.detail ?? 'Chat request failed')
+  let res: Response
+  try {
+    res = await fetch(`${API_URL}/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ question, history }),
+    })
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    throw new Error(`Cannot reach backend at ${API_URL}: ${msg}`)
   }
-  return res.json()
+
+  const rawText = await res.text()
+  let data: Record<string, unknown> = {}
+  try {
+    data = rawText ? JSON.parse(rawText) : {}
+  } catch {
+    // Non-JSON
+  }
+
+  if (!res.ok) {
+    const detail = typeof data.detail === 'string' ? data.detail : null
+    throw new Error(detail ?? `Chat failed (HTTP ${res.status}): ${rawText.slice(0, 150)}`)
+  }
+
+  return data as unknown as ChatResponse
 }
 
 // ── Collections ───────────────────────────────────────────────────────────────

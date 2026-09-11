@@ -25,9 +25,9 @@ class Settings(BaseSettings):
     # ── Groq ──────────────────────────────────────────────────────────────────
     groq_api_key: str = ""
 
-    # Model routing: reserve 70B for generation + NL→SQL, use 8B everywhere else
-    model_generation: str = "llama-3.3-70b-versatile"   # final answer, NL→SQL
-    model_cheap: str = "llama-3.1-8b-instant"           # guardrail, router, groundedness
+    # Model routing: reserve 120B for generation + NL→SQL, use 20B everywhere else
+    model_generation: str = "openai/gpt-oss-120b"   # final answer, NL→SQL
+    model_cheap: str = "openai/gpt-oss-20b"         # guardrail, router, groundedness
 
     # ── Qdrant ────────────────────────────────────────────────────────────────
     qdrant_url: str = ""
@@ -56,6 +56,7 @@ class Settings(BaseSettings):
     # ── Embedding / reranker ──────────────────────────────────────────────────
     embed_model: str = "BAAI/bge-small-en-v1.5"
     reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    use_cross_encoder: bool = False  # False for Render 512MB free tier; True for local/high-RAM
     retrieval_top_k: int = 20    # broad candidates from Qdrant
     rerank_max_docs: int = 3     # cap reranker by max unique documents (all relevant chunks admitted)
     rerank_top_n: int = 3        # fallback ceiling if document capping not used
