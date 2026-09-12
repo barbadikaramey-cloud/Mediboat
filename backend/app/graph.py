@@ -64,11 +64,12 @@ _RAG_SYSTEM = (
 
 # ── Router system prompt ───────────────────────────────────────────────────────
 _ROUTER_SYSTEM = (
-    "Classify the following user question as either 'analytical' or 'document'.\n"
+    "Classify the following user question as either 'analytical' or 'document' taking into account the conversation history.\n"
     "- 'analytical': questions about counts, numbers, totals, averages, statistics, "
-    "claims submitted/approved/escalated/rejected, maintenance tickets raised/resolved, "
-    "equipment fault counts, costs, amounts, or grouped metrics from the database.\n"
-    "- 'document': questions about medical protocols, clinical guidelines, treatments, "
+    "claims submitted/approved/escalated/rejected, maintenance tickets, equipment faults, "
+    "costs, amounts, patient or department breakdowns/segregations, or follow-ups/clarifications to previous "
+    "database or analytical answers (e.g. 'but this is only 4', 'you said 9 claims', 'show all records', 'full answer', 'why only 1').\n"
+    "- 'document': questions about clinical protocols, medical treatments, drug dosages, "
     "hospital policies, staff handbooks, leave rules, insurance submission procedures, "
     "or general information.\n\n"
     "Reply with exactly one word: analytical OR document."
@@ -98,6 +99,14 @@ _ANALYTICAL_PATTERN = re.compile(
     r"highest\s+(claimed|amount|cost)|"
     r"lowest\s+(claimed|amount|cost)|"
     r"by\s+department|grouped\s+by|"
+    r"segregat(ion|e)?|"
+    r"breakdown|"
+    r"per\s+(patient|department|doctor|hospital|equipment|category|month|insurer)|"
+    r"(only|just)\s+\d+|"
+    r"full\s+(answer|list|result|records?|table)|"
+    r"all\s+(records?|claims?|tickets?|rows?)|"
+    r"(list|show)\s+(the\s+)?(claims?|tickets?|records?|breakdown)|"
+    r"why\s+only|"
     r"(claims?|tickets?)\s+(in|for|during)\s+(the\s+)?last\s+(month|year|week)|"
     r"(claims?|tickets?)\s+submitted"
     r")\b",
@@ -203,41 +212,50 @@ async def node_router(state: ChatState) -> dict:
             verdict = "analytical"
             logfire_info("Router fast-path matched analytical regex pattern.")
         else:
-            # 2. LLM classifier with sufficient tokens (256) so reasoning tokens don't eat content
-            settings = get_settings()
-            client = AsyncGroq(api_key=settings.groq_api_key, timeout=20.0)
-
             recent_history = [
                 {"role": h["role"], "content": h["content"]}
                 for h in (state.get("history") or [])[-4:]
                 if h.get("role") in ("user", "assistant") and h.get("content")
             ]
-            router_messages = [{"role": "system", "content": _ROUTER_SYSTEM}]
-            router_messages.extend(recent_history)
-            router_messages.append({"role": "user", "content": question})
+            last_assistant = next((h["content"] for h in reversed(recent_history) if h["role"] == "assistant"), "")
+            is_followup_to_sql = any(k in last_assistant.lower() for k in ("claim", "ticket", "approved", "claimed", "₹", "inr", "record", "department", "patient id"))
+            short_followup_pattern = re.compile(r"\b(why|only|how\s+come|more|full|explain|all|where\s+are|details?|breakdown)\b", re.IGNORECASE)
 
-            try:
-                response = await client.chat.completions.create(
-                    model=settings.model_cheap.strip(),
-                    messages=router_messages,
-                    temperature=0,
-                    max_tokens=256,
-                )
-                raw_content = (response.choices[0].message.content or "").strip().lower()
-                raw_reasoning = (getattr(response.choices[0].message, "reasoning", "") or "").lower()
+            if is_followup_to_sql and short_followup_pattern.search(question):
+                verdict = "analytical"
+                logfire_info("Router fast-path: conversational follow-up to analytical response.")
+            else:
+                # 2. LLM classifier with sufficient tokens (512) so reasoning tokens don't eat content
+                settings = get_settings()
+                client = AsyncGroq(api_key=settings.groq_api_key.strip(), timeout=20.0)
 
-                if "analytical" in raw_content:
-                    verdict = "analytical"
-                else:
+                router_messages = [{"role": "system", "content": _ROUTER_SYSTEM}]
+                router_messages.extend(recent_history)
+                router_messages.append({"role": "user", "content": question})
+
+                try:
+                    response = await client.chat.completions.create(
+                        model=settings.model_cheap.strip(),
+                        messages=router_messages,
+                        temperature=0,
+                        max_tokens=512,
+                    )
+                    raw_content = (response.choices[0].message.content or "").strip().lower()
+                    raw_reasoning = (getattr(response.choices[0].message, "reasoning", "") or "").lower()
+                    combined_verdict = f"{raw_content} {raw_reasoning}"
+
+                    if "analytical" in combined_verdict:
+                        verdict = "analytical"
+                    else:
+                        verdict = "document"
+                    logfire_info(
+                        "Router LLM verdict: {verdict} (raw_content='{content}')",
+                        verdict=verdict,
+                        content=raw_content,
+                    )
+                except Exception as exc:
+                    logger.warning("Router LLM failed (%s) — defaulting to document_rag", exc)
                     verdict = "document"
-                logfire_info(
-                    "Router LLM verdict: {verdict} (raw_content='{content}')",
-                    verdict=verdict,
-                    content=raw_content,
-                )
-            except Exception as exc:
-                logger.warning("Router LLM failed (%s) — defaulting to document_rag", exc)
-                verdict = "document"
 
         route = "sql_rag" if verdict == "analytical" else "document_rag"
         logfire_info("Final routing destination: {route}", route=route)

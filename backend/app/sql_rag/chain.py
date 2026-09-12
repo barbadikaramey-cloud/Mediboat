@@ -70,13 +70,18 @@ _NL2SQL_SYSTEM = (
     "Temporal context: All records in this database are from 2024 (the latest recorded month is December 2024, i.e. '2024-12'). "
     "When the user asks for 'last month', 'recent', or relative time without a year, "
     "interpret it relative to the latest month in the database (e.g. using '2024-12' or "
-    "strftime('%Y-%m', submitted_date) = (SELECT strftime('%Y-%m', MAX(submitted_date)) FROM claims))."
+    "strftime('%Y-%m', submitted_date) = (SELECT strftime('%Y-%m', MAX(submitted_date)) FROM claims)).\n"
+    "Context Continuity: If the user's query is a follow-up, refinement, or breakdown (e.g., asking for department/patient segregation, "
+    "breakdown of claims, or asking why records are missing after an earlier question about 'last month' or specific criteria), "
+    "RETAIN that time period/filter (e.g. strftime('%Y-%m', submitted_date) = '2024-12') so that the breakdown covers the exact same set of records.\n"
+    "Completeness: Do NOT apply an arbitrary LIMIT clause. Return all matching rows or groups so all records are accounted for."
 )
 
 _ANSWER_SYSTEM = (
-    "You are a helpful data analyst for a healthcare network. "
-    "Given a SQL query result, provide a concise, clear answer to the original question. "
-    "Format numbers readably. Do not mention SQL or technical details."
+    "You are a helpful healthcare data analyst. "
+    "Given a SQL query result, provide a complete and clear answer formatted with Markdown tables and bullet points. "
+    "Show the full breakdown for all returned records without truncating or leaving rows out. "
+    "Format amounts readably (e.g., ₹ amounts with commas). Do not mention SQL syntax or internal database engine details."
 )
 
 
@@ -148,9 +153,11 @@ def sql_rag_chain(question: str, history: list[dict] | None = None) -> str:
                 model=settings.model_generation.strip(),  # 70B for NL→SQL quality
                 messages=nl2sql_messages,
                 temperature=0,
-                max_tokens=512,
+                max_tokens=1024,
             )
             raw_sql_output = nl2sql_response.choices[0].message.content or ""
+            if not raw_sql_output.strip() and getattr(nl2sql_response.choices[0].message, "reasoning", None):
+                raw_sql_output = getattr(nl2sql_response.choices[0].message, "reasoning", "")
 
         # ── Step 2: Extract bare SQL ───────────────────────────────────────────
         sql = _extract_sql(raw_sql_output)
@@ -197,9 +204,25 @@ def sql_rag_chain(question: str, history: list[dict] | None = None) -> str:
                 model=settings.model_generation.strip(),
                 messages=answer_messages,
                 temperature=0.2,
-                max_tokens=512,
+                max_tokens=2048,
             )
-            answer = answer_response.choices[0].message.content or "No answer generated."
+            choice = answer_response.choices[0]
+            answer = (choice.message.content or "").strip()
+            if not answer and getattr(choice.message, "reasoning", None):
+                answer = getattr(choice.message, "reasoning", "").strip()
+
+            # Deterministic fallback if LLM produced empty text
+            if not answer:
+                headers = list(rows[0].keys())
+                header_line = " | ".join(h.replace("_", " ").title() for h in headers)
+                sep_line = " | ".join(["---"] * len(headers))
+                row_lines = [" | ".join(str(r[h]) if r[h] is not None else "-" for h in headers) for r in rows]
+                answer = (
+                    f"Found **{len(rows)}** record(s):\n\n"
+                    f"| {header_line} |\n"
+                    f"| {sep_line} |\n"
+                    + "\n".join(f"| {rl} |" for rl in row_lines)
+                )
 
         logfire_info("SQL RAG complete (answer_length={length} chars)", length=len(answer))
         return answer
