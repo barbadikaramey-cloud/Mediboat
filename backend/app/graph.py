@@ -241,10 +241,8 @@ async def node_router(state: ChatState) -> dict:
                         max_tokens=512,
                     )
                     raw_content = (response.choices[0].message.content or "").strip().lower()
-                    raw_reasoning = (getattr(response.choices[0].message, "reasoning", "") or "").lower()
-                    combined_verdict = f"{raw_content} {raw_reasoning}"
 
-                    if "analytical" in combined_verdict:
+                    if "analytical" in raw_content:
                         verdict = "analytical"
                     else:
                         verdict = "document"
