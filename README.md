@@ -12,13 +12,19 @@
 [![Logfire](https://img.shields.io/badge/Pydantic-Logfire_Telemetry-E92063?style=for-the-badge)](https://pydantic.dev/logfire)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
 
-[Live Demo](https://mediboat.onrender.com) • [Architecture](#-system-architecture) • [Security & RBAC](#-zero-trust-cryptographic-vector-rbac) • [Ingestion Pipeline](#-hierarchical-ingestion-pipeline) • [LangGraph Orchestration](#-langgraph-state-machine-orchestration) • [Hybrid RAG & Memory Optimization](#-hybrid-retrieval--memory-optimization) • [Text-to-SQL](#-deterministic-text-to-sql-analytical-engine) • [Guardrails & Groundedness](#-dual-tier-guardrails--groundedness-verification) • [API Specification](#-api-specification)
+[Live Demo](https://mediboat.onrender.com) • [Architecture](#-system-architecture) • [Security & RBAC](#-zero-trust-cryptographic-vector-rbac) • [Ingestion Pipeline](#-hierarchical-ingestion-pipeline) • [LangGraph Orchestration](#-langgraph-state-machine-orchestration) • [Hybrid RAG & Memory Optimization](#-hybrid-retrieval--memory-optimization) • [Text-to-SQL](#-deterministic-text-to-sql-analytical-engine) • [Guardrails & Groundedness](#-dual-tier-guardrails--groundedness-verification) • [Observability](#-enterprise-observability-telemetry--debugging) • [API Specification](#-api-specification)
 
 </div>
 
 ---
 
 ## 📌 Executive Overview
+
+> [!TIP]
+> ### 🌐 Live Cloud Deployment
+> **Render Web Service**: [https://mediboat.onrender.com](https://mediboat.onrender.com)
+> 
+> The platform is deployed live on Render with unified multi-role authentication, vector search, text-to-SQL, and dual-tier guardrails. You can test immediately using any of the built-in clinical and administrative accounts (`dr.mehta`, `nurse.priya`, `billing.ravi`, `tech.anand`, `admin.sys`).
 
 **MediBot** is an enterprise clinical and operational intelligence system engineered for multi-facility healthcare networks (e.g., **MediAssist Health Network**: 12 regional tertiary hospitals, 40+ specialized outpatient clinics, and 3,500+ clinical and administrative personnel).
 
@@ -571,6 +577,89 @@ Run evaluation locally:
 cd backend
 python -m eval.run_ragas
 ```
+
+---
+
+## 🔭 Enterprise Observability, Telemetry & Debugging
+
+In mission-critical healthcare AI platforms, silent failures, unmonitored tail latencies, or uninspected database executions can directly compromise clinical operations. MediBot integrates comprehensive, production-grade observability combining **Pydantic Logfire** (OpenTelemetry distributed tracing, HTTP APM, SQL query logging, and L2 cache monitoring) and **LangSmith** (LLM orchestration tracing, token usage, P50/P99 latency percentiles, and per-node execution profiling).
+
+### 1. Distributed Tracing & Span Trees (Pydantic Logfire)
+
+Every user query triggers an OpenTelemetry-compatible, microsecond-accurate distributed span tree capturing execution times across the FastAPI gateway, LangGraph state machine, SQLite database, and Upstash Redis:
+
+<div align="center">
+
+![Pydantic Logfire SQL RAG Trace](docs/images/logfire_sql_rag_trace.png)
+
+*Figure: Pydantic Logfire distributed trace tree across `POST /chat`, `api.chat`, `graph.node_input_guard`, `graph.node_router`, `rag.sql_flow`, `sql_rag.execute_sqlite` (returning 9 rows), LLM synthesis, and Upstash Redis L2 cache storage.*
+
+</div>
+
+#### Key Distributed Tracing Highlights:
+* **End-to-End Span Hierarchy**: Full visibility into each processing stage: `POST /chat` ➔ `api.chat` ➔ `graph.node_input_guard` ➔ `graph.node_router` ➔ `rag.sql_flow` ➔ `sql_rag.nl_to_sql_flow` ➔ `sql_rag.execute_sqlite` ➔ `sql_rag.synthesize_answer_llm` ➔ `cache.upstash_redis_set`.
+* **Database & Query Telemetry**: Instruments SQLite database executions in real time (`sqlite3.Cursor.execute: SELECT ... -> 9 rows`), ensuring analytical queries remain strictly read-only, deterministic, and execute in under 10ms.
+* **L2 Cache Verification**: Traces cache lookups and writes into Upstash Redis, guaranteeing sub-second response times on cached clinical and analytical inquiries.
+
+#### Live HTTP API Telemetry & Health Probes:
+
+<div align="center">
+
+![Logfire Endpoint Telemetry](docs/images/logfire_endpoint_metrics.png)
+
+*Figure: FastAPI Logfire live endpoint monitoring showing 200 OK responses on `/health` and `/login`, and 401 Unauthorized detection on unauthenticated attempts.*
+
+</div>
+
+* **Role-Bound Authentication Auditing**: Telemetry monitors `POST /login` credential verification and role encoding (`doctor`, `nurse`, `billing_executive`, `technician`, `admin`).
+* **Zero-Trust Auth Enforcement**: Immediately flags unauthenticated or malformed requests (`POST /chat` returning `401 Unauthorized`), preventing access before LLM inference.
+* **Continuous Cloud Health Checking**: Verifies automated liveness probes (`GET /health` returning `200 OK`) conducted by Render cloud hosting.
+
+---
+
+### 2. LLM Orchestration Tracing & Latency Analytics (LangSmith)
+
+MediBot leverages **LangSmith** to monitor LLM invocations, token throughput, safety guardrail latency, and percentiles across hospital network queries:
+
+#### Latency Percentiles (P50 / P99) & Trace Volume:
+
+<div align="center">
+
+![LangSmith Trace Count and Latency Monitoring](docs/images/langsmith_trace_latency.png)
+
+*Figure: LangSmith dashboard displaying trace volume (100% success rate) alongside P50 and P99 latency percentiles over time to track tail-latency stability.*
+
+</div>
+
+* **P50 vs. P99 Tail-Latency Tracking**: Monitors median turnaround time alongside worst-case tail latencies (e.g., complex multi-table SQL queries or dense+sparse hybrid vector searches with cross-encoder re-ranking).
+* **Fault Isolation**: Provides real-time alerts on any upstream model rate limits, API timeouts, or parsing errors with zero production blind spots.
+
+#### Granular Run-Type Breakdown:
+
+<div align="center">
+
+![LangSmith Run Types and Node Latency](docs/images/langsmith_run_types.png)
+
+*Figure: Run count and median latency distribution across LangGraph orchestration nodes (`document_rag`, `input_guard`, `output_guard`, `router`, `sql_rag`).*
+
+</div>
+
+* **Per-Node Performance Profiling**:
+  * **Input & Output Guardrails** (`input_guard`, `output_guard`): Regex fast-path checks execute in `< 10ms`, while secondary Llama-3.1-8B safety classifiers evaluate in `~0.25s – 0.40s`.
+  * **Adaptive Intent Router** (`router`): Sub-second routing decision categorizes prompts into clinical guideline retrieval vs. financial SQL queries.
+  * **RAG & SQL Synthesis** (`document_rag`, `sql_rag`): Groq LPU inference powers high-throughput generation (`~1.5s – 3.5s`), drastically minimizing clinical wait times.
+
+#### Audit Trail & Step-by-Step Run Stream:
+
+<div align="center">
+
+![LangSmith Execution Runs Log](docs/images/langsmith_execution_runs.png)
+
+*Figure: Complete audit stream in LangSmith tracking user inputs, synthesized outputs, latency, and exact token counts for clinical governance.*
+
+</div>
+
+* **Regulatory & Clinical Compliance**: Every query, retrieved passage, generated SQL statement, and synthesized response is logged with immutable timestamps for medical auditability and HIPAA data governance.
 
 ---
 
