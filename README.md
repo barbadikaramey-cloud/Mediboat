@@ -1,28 +1,18 @@
----
-title: MediBot
-emoji: 🏥
-colorFrom: red
-colorTo: blue
-sdk: gradio
-app_file: run.py
-pinned: false
----
-
 <div align="center">
 
 # 🏥 MediBot: Enterprise Healthcare AI Knowledge Platform
 
 **Production-grade, zero-trust Retrieval-Augmented Generation (RAG) and analytical intelligence engine for enterprise hospital networks.**
 
+[![Live Demo](https://img.shields.io/badge/Render-Live_Demo-46E3B7?style=for-the-badge&logo=render&logoColor=white)](https://mediboat.onrender.com)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![Next.js](https://img.shields.io/badge/Next.js-15.1-000000?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
 [![LangGraph](https://img.shields.io/badge/LangGraph-Stateful_Orchestration-1C3C3C?style=for-the-badge)](https://langchain-ai.github.io/langgraph/)
 [![Qdrant](https://img.shields.io/badge/Qdrant-Hybrid_Vector_Search-DC2626?style=for-the-badge&logo=qdrant&logoColor=white)](https://qdrant.tech/)
 [![Groq](https://img.shields.io/badge/Groq-LPU_Inference-F05A28?style=for-the-badge)](https://groq.com/)
 [![Logfire](https://img.shields.io/badge/Pydantic-Logfire_Telemetry-E92063?style=for-the-badge)](https://pydantic.dev/logfire)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
 
-[Architecture](#-system-architecture) • [Security & RBAC](#-zero-trust-cryptographic-vector-rbac) • [Ingestion Pipeline](#-hierarchical-ingestion-pipeline) • [LangGraph Orchestration](#-langgraph-state-machine-orchestration) • [Hybrid RAG & Reranking](#-hybrid-retrieval--cross-encoder-reranking) • [Text-to-SQL](#-deterministic-text-to-sql-analytical-engine) • [Guardrails & Groundedness](#-dual-tier-guardrails--groundedness-verification) • [Token Economics](#-token-economics--latency-benchmarks) • [Getting Started](#-deployment--getting-started) • [API Specification](#-api-specification)
+[Live Demo](https://mediboat.onrender.com) • [Architecture](#-system-architecture) • [Security & RBAC](#-zero-trust-cryptographic-vector-rbac) • [Ingestion Pipeline](#-hierarchical-ingestion-pipeline) • [LangGraph Orchestration](#-langgraph-state-machine-orchestration) • [Hybrid RAG & Memory Optimization](#-hybrid-retrieval--memory-optimization) • [Text-to-SQL](#-deterministic-text-to-sql-analytical-engine) • [Guardrails & Groundedness](#-dual-tier-guardrails--groundedness-verification) • [API Specification](#-api-specification)
 
 </div>
 
@@ -60,25 +50,25 @@ flowchart TD
     end
 
     subgraph RouterEngine["Adaptive Intent Router"]
-        ROUTER{"LangGraph State Router"}
+        ROUTER{"LangGraph State Router<br/>(Analytical vs Document + Follow-up Detection)"}
     end
 
     subgraph RetrievalEngine["Unstructured Document RAG"]
-        QDRANT[("Qdrant Cloud Vector DB")]
-        CE["Cross-Encoder MiniLM Reranker"]
-        DOC_LLM["Llama-3.3-70B Versatile"]
+        QDRANT[("Qdrant Cloud Vector DB<br/>(Dense BGE + Sparse BM25)")]
+        CE["Optional Cross-Encoder MiniLM Reranker"]
+        DOC_LLM["LLM Generation Engine<br/>(OpenAI GPT-OSS-120B / Llama 70B)"]
     end
 
     subgraph AnalyticalEngine["Structured SQL RAG"]
         SCHEMA["In-Memory Relational Schema"]
-        SQL_GEN["NL-to-SQL Compiler"]
-        SQLITE[("Operational Relational DB")]
+        SQL_GEN["NL-to-SQL Compiler<br/>(Context-Continuous 120B)"]
+        SQLITE[("Operational SQLite Database<br/>(Auto-Seeded mediassist.db)")]
     end
 
     subgraph VerificationEngine["Verification and Output Engine"]
-        OG["NLI Groundedness Checker"]
+        OG["NLI Groundedness & Citation Pruning<br/>(Sentence-Level Audit Option B)"]
         CACHE[("Upstash Redis L2 Cache")]
-        OUT["Synthesized Clinical Response with Citations"]
+        OUT["Synthesized Response with Verified Citations"]
     end
 
     UI --> GW
@@ -88,15 +78,15 @@ flowchart TD
     CL -->|Safe Query| ROUTER
     CL -->|Blocked Query| OUT
 
-    ROUTER -->|Clinical Guidelines| QDRANT
-    QDRANT -->|Top-10 Candidates| CE
-    CE -->|Top-3 Excerpts| DOC_LLM
+    ROUTER -->|Clinical Guidelines & SOPs| QDRANT
+    QDRANT -->|Top Candidates| CE
+    CE -->|Top Excerpts| DOC_LLM
     DOC_LLM --> OG
 
-    ROUTER -->|Analytical Metrics| SCHEMA
+    ROUTER -->|Analytical & Follow-Up Metrics| SCHEMA
     SCHEMA --> SQL_GEN
     SQL_GEN -->|Sanitized SQL| SQLITE
-    SQLITE -->|Aggregated Data| OG
+    SQLITE -->|Aggregated Data & Table Fallback| OG
 
     OG -->|Verified Output| CACHE
     CACHE --> OUT
@@ -246,28 +236,33 @@ sequenceDiagram
 * **Sparse Lexical Vector**: Qdrant native BM25 indexes specific drug formulations (`vancomycin 15-20 mg/kg`), ICD-10 diagnostic codes (`J18.9`), and exact equipment model numbers.
 * **Reciprocal Rank Fusion (RRF)**: Native in-database fusion calculates unified ranks:
   $$\text{Score}_{\text{RRF}}(d) = \sum_{m \in \{\text{dense}, \text{sparse}\}} \frac{1}{60 + \text{Rank}_m(d)}$$
-* **Local Cross-Encoder Reranker**: `cross-encoder/ms-marco-MiniLM-L-6-v2` executes locally on CPU, calculating cross-attention over `(query, passage)` pairs to prune 10 broad chunks down to the 3 most informative excerpts.
+* **Docker FastEmbed Pre-Caching**: FastEmbed models (`bge-small-en-v1.5` and `Qdrant/bm25`) are pre-downloaded and baked into `/app/.fastembed_cache` during Docker image build. This prevents cold-start network downloads and eliminates startup latency.
+* **Configurable Cross-Encoder Memory Optimization**: Cross-Encoder reranking (`cross-encoder/ms-marco-MiniLM-L-6-v2`) is fully configurable via `USE_CROSS_ENCODER=false` for cloud free tiers (e.g. Render 512 MB RAM limit, keeping container footprint under 350 MB) or `true` for local and high-RAM deployments.
 
 ---
 
 ## 🗄 Deterministic Text-to-SQL Analytical Engine
 
-Hospital administrators and billing executives frequently require aggregate statistics (*"Total claims submitted last month"*, *"Average reimbursement amount by medical department"*). Unstructured vector search cannot answer mathematical or aggregative queries accurately.
+Hospital administrators and billing executives frequently require aggregate statistics (*"Total claims submitted last month"*, *"Average reimbursement amount by medical department"*, *"Department and patient-wise segregation"*). Unstructured vector search cannot answer mathematical or aggregative queries accurately.
 
 MediBot routes these questions to a specialized **Text-to-SQL Engine**:
 
-1. **Static Schema Constant**: The operational database schema (`claims`, `maintenance_tickets`, `patients`) is compiled as a static Python constant, eliminating database schema lookups on every request.
-2. **Dynamic Temporal Grounding**: Injects operational temporal anchors, enabling relative time expressions (*"last month"*, *"this quarter"*) to be deterministically mapped to ISO date ranges:
+1. **Static Schema Constant**: The operational database schema (`claims`, `maintenance_tickets`) is compiled as a static Python constant, eliminating database schema lookups on every request.
+2. **Context-Continuous Temporal Grounding**: Injects operational temporal anchors, enabling relative time expressions (*"last month"*, *"this quarter"*) to be deterministically mapped to ISO date ranges:
    ```sql
    -- Generated for "What is total claims in last month?" (anchored to 2024-12)
    SELECT COUNT(claim_id) AS total_claims, SUM(claimed_amount) AS total_amount
    FROM claims 
-   WHERE submission_date BETWEEN '2024-12-01' AND '2024-12-31';
+   WHERE strftime('%Y-%m', submitted_date) = '2024-12';
    ```
-3. **Execution Guardrails**:
+3. **Conversational Multi-Turn Continuity**: When the user follows up with refinement queries (e.g. *"give me department and patient wise segregation"* after asking about *"claims last month"*), the engine automatically carries forward the active temporal filter (`2024-12`) without applying artificial `LIMIT` clauses, guaranteeing that all matching records are accounted for.
+4. **Follow-Up Intent Retention**: The router detects short conversational follow-ups and clarification requests (e.g. *"but this is only 4"*, *"why only 1"*, *"give me full answer"*) and keeps them seamlessly within the `sql_rag` state.
+5. **High-Capacity Generation & Deterministic Table Fallback**:
+   * Answer synthesis is allocated **2,048 tokens** (and SQL generation **1,024 tokens**) so comprehensive Markdown tables with dozens of rows are never cut off.
+   * If model generation is interrupted or tokens are consumed by internal reasoning, a **deterministic Markdown table fallback** automatically formats the raw SQLite rows directly into a styled, complete table.
+6. **Execution Guardrails**:
    * Connections are opened strictly in read-only mode (`PRAGMA query_only = ON`).
    * Queries containing DDL or DML statements (`DROP`, `UPDATE`, `DELETE`, `INSERT`, `ALTER`) are blocked before execution.
-   * Execution results are translated back into natural language by Llama 3.3 70B with tabular summaries.
 
 ---
 
@@ -304,8 +299,9 @@ flowchart TD
 
 ### Safety Features:
 * **Allowlist Fast-Path**: Bypasses LLM safety checks for standard medical questions (`"treatment of pneumonia"`, `"STEMI protocol"`) in `< 1 ms`.
-* **Reasoning Budget Allocation**: Configures `max_tokens=256` for 8B classifiers to prevent Groq internal reasoning tokens from truncating the classification output.
-* **NLI Groundedness Checker**: Assesses whether every claim in the generated text is directly entailment-supported by the top-3 retrieved excerpts.
+* **Reasoning Budget Allocation**: Configures generous token limits (`max_tokens=512` for router/classifiers, `1024` for SQL translation, `2048` for answer synthesis) to ensure reasoning tokens never truncate content.
+* **NLI Groundedness Checker**: Evaluates whether clinical claims are strictly entailed by the retrieved excerpts.
+* **Option B Automated Citation Verification & Sentence Pruning**: Extracts every citation bracket (e.g. `[1]`, `[2]`), executes an NLI entailment check on the candidate sentences against source excerpts, and automatically prunes any sentence containing unsupported or fabricated citations before presenting the answer to clinical staff.
 
 ---
 
@@ -314,6 +310,7 @@ flowchart TD
 Conversational memory is supported across both Document RAG and SQL RAG:
 
 * **State Serialization**: The last 4 conversational turns are carried over in the `ChatState["history"]`.
+* **Context Continuity in Analytics**: Automatically carries forward temporal context (such as `"last month"` -> `2024-12`) into follow-up queries (e.g., `"segregate by patient and department"`).
 * **Disambiguation & Anaphora Resolution**:
   * *User Turn 1*: "What are the ICU protocols for ventilated patients?"
   * *User Turn 2*: "What is the recommended suction pressure for them?"
@@ -324,49 +321,46 @@ Conversational memory is supported across both Document RAG and SQL RAG:
 
 ## 🎨 Frontend Architecture & Clinical UI
 
-The user interface is built with **Next.js 15 App Router** and styled with an authentic, calming clinical aesthetic:
+MediBot provides two interface options:
 
-* **High-Contrast Brand Identity**: Prominent, accessible typography with high contrast ratios for clinical workstations.
-* **Custom Streaming Markdown Renderer (`MarkdownRenderer.tsx`)**:
-  * Formats inline bold weights, italic medical notes, and monospace drug formulas.
-  * Formats responsive, styled tables for clinical criteria and dosage guidelines.
-* **Interactive Citations Viewer (`SourcesViewer.tsx`)**:
-  * **Collapsed by Default**: Preserves chat screen space for reading the primary response.
-  * **Full Metadata Inspection**: Expands to reveal source document name, collection category, exact page number, and Cross-Encoder score.
-  * **Verbatim Excerpt Inspection**: Includes a dedicated panel displaying the exact retrieved passage with a one-click copy function.
-* **Test Role Drawer**: Collapsible quick-switch menu for testing different roles without manual credential entry.
+1. **Embedded Production Staff Portal (`backend/app/static/index.html`)**:
+   * Served directly by FastAPI at `/` on Render (`https://mediboat.onrender.com`).
+   * Zero extra server dependencies: Includes real-time chat, responsive Markdown rendering, collapsible source inspection with chunk text previews, and one-click role switching between Doctor, Nurse, Billing Executive, Technician, and Admin.
+2. **Standalone Next.js 15 Web Application (`frontend/`)**:
+   * Built with Next.js 15 App Router, React 19, TypeScript, and TailwindCSS for custom web deployments.
+   * Features custom streaming markdown, structured tables, and deep interactive citation sidebars.
 
 ---
 
 ## 📊 Token Economics & Latency Benchmarks
 
-By utilizing local embedding/reranking models and hierarchical LLM routing, MediBot achieves low operating costs without compromising accuracy:
+By utilizing local embedding models and hierarchical LLM routing on Groq, MediBot achieves low operating costs without compromising clinical rigor:
 
 | Pipeline Stage | Engine / Model | Execution Tier | Latency | Token / API Cost |
 |---|---|---|:---:|:---:|
 | **Identity & Rate Limiting** | HMAC-SHA256 + Redis | Local / Edge | `< 2 ms` | **$0.00** |
-| **Input Security Guardrail** | Regex Fast-Path + Llama-3.1-8B | CPU + Groq LPU | `85 ms` | **~$0.00005** |
-| **Dense + Sparse Embeddings** | FastEmbed + Native BM25 | Local CPU (ONNX) | `22 ms` | **$0.00** (Local) |
+| **Input Security Guardrail** | Regex Fast-Path + GPT-OSS-20B | CPU + Groq LPU | `85 ms` | **~$0.00005** |
+| **Dense + Sparse Embeddings** | FastEmbed + Native BM25 | Local CPU (ONNX Cached) | `22 ms` | **$0.00** (Local) |
 | **Candidate Retrieval (K=10)** | Qdrant Cloud RRF | Cloud Vector DB | `45 ms` | Free Tier Included |
-| **Passage Reranking (N=3)** | Cross-Encoder MiniLM-L6 | Local CPU | `38 ms` | **$0.00** (Local) |
-| **Response Generation** | Llama-3.3-70B Versatile | Groq LPU | `410 ms` | **~$0.00085** |
-| **Factual Consistency Audit** | Llama-3.1-8B Instant | Groq LPU | `95 ms` | **~$0.00006** |
-| **Total End-to-End** | **MediBot Pipeline** | **Hybrid Cloud/Edge** | **~690 ms** | **<$0.001 / query** |
+| **Response Generation** | OpenAI GPT-OSS-120B | Groq LPU | `380 ms` | **~$0.00085** |
+| **Factual Consistency Audit** | OpenAI GPT-OSS-20B | Groq LPU | `95 ms` | **~$0.00006** |
+| **Total End-to-End** | **MediBot Pipeline** | **Hybrid Cloud/Edge** | **~600 ms** | **<$0.001 / query** |
 
 ---
 
 ## 🛠 Tech Stack
 
 ```
-Frontend:          Next.js 15.1 (App Router), React 19, TypeScript, TailwindCSS, Lucide Icons
-Backend:           FastAPI 0.115 (Python 3.12 async), Uvicorn, Pydantic v2
+Embedded Portal:   Vanilla JS, TailwindCSS CDN, HTML5 (served directly at / on Render)
+Next.js Frontend:  Next.js 15.1 (App Router), React 19, TypeScript, TailwindCSS, Lucide Icons
+Backend:           FastAPI 0.115 (Python 3.12 async), Uvicorn, Pydantic v2 Settings (auto-stripping)
+Package Manager:   Astral uv (ultra-fast containerized dependency resolution)
 Orchestration:     LangGraph, LangChain Core
 Vector Database:   Qdrant Cloud (Hybrid Dense + Sparse Vectors with Native RRF)
-Relational DB:     SQLite 3, SQLAlchemy ORM
+Relational DB:     SQLite 3 (auto-seeded data/mediassist.db), SQLAlchemy ORM
 Cache / Store:     Upstash Redis (RESTful distributed caching & sliding-window rate limiting)
-Embedding Models:  FastEmbed BAAI/bge-small-en-v1.5 (Dense), Qdrant BM25 (Sparse)
-Reranker:          Sentence-Transformers cross-encoder/ms-marco-MiniLM-L-6-v2
-Inference Engine:  Groq Cloud LPU (Llama 3.3 70B Versatile, Llama 3.1 8B Instant)
+Embedding Models:  FastEmbed BAAI/bge-small-en-v1.5 (Dense), Qdrant BM25 (Sparse) - Pre-cached in Docker
+Inference Engine:  Groq Cloud LPU (openai/gpt-oss-120b for Generation & SQL, openai/gpt-oss-20b for Routing & Guardrails)
 Observability:     Pydantic Logfire, LangSmith LLM Tracing
 Document Parsing:  Docling, PyPDFium2, HybridChunker
 ```
@@ -430,32 +424,60 @@ python -m app.ingestion.ingest
 
 ---
 
-### Step 3: Start Services
+### Step 3: Start Services Locally
 
-#### Start Backend (Port 8000)
+#### Run Backend & Interactive Portal (Port 8000)
 ```bash
 # In backend/ with venv active
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
-*API Swagger Documentation: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)*
+* Interactive Staff Portal: [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
+* API Swagger Documentation: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 
-#### Start Frontend (Port 3000)
+#### (Optional) Run Standalone Next.js Frontend (Port 3000)
 ```bash
 # In frontend/ in a separate terminal:
 npm install
 npm run dev -- -p 3000
 ```
-*Clinical Web Terminal: [http://localhost:3000](http://localhost:3000)*
+* Next.js Web Terminal: [http://localhost:3000](http://localhost:3000)
 
 ---
 
 ### Step 4: Run with Docker
+
+Build the optimized multi-stage container with pre-cached embedding weights:
 
 ```bash
 cd backend
 docker build -t medibot-backend:latest .
 docker run -d -p 8000:8000 --env-file .env medibot-backend:latest
 ```
+
+Open [http://localhost:8000](http://localhost:8000) to access the staff portal.
+
+---
+
+### Step 5: Cloud Deployment on Render
+
+MediBot is configured for zero-downtime deployment on **Render** (Free Tier compatible):
+
+1. Connect your repository to **Render** and create a **Web Service**.
+2. Select **Docker** environment (pointing to `backend/Dockerfile` as Dockerfile path and `backend` as Docker context).
+3. Set the following environment variables in the Render Dashboard:
+   ```ini
+   GROQ_API_KEY=gsk_...
+   QDRANT_URL=https://...aws.cloud.qdrant.io:6333
+   QDRANT_API_KEY=...
+   QDRANT_COLLECTION=medibot
+   UPSTASH_REDIS_URL=https://...upstash.io
+   UPSTASH_REDIS_TOKEN=...
+   JWT_SECRET_KEY=generate-secure-hex-key
+   MODEL_GENERATION=openai/gpt-oss-120b
+   MODEL_CHEAP=openai/gpt-oss-20b
+   ```
+4. Render will automatically build the image with `uv`, cache the FastEmbed weights, run `seed_db.py`, and launch the web service.
+5. Access the live production deployment: **[https://mediboat.onrender.com](https://mediboat.onrender.com)**
 
 ---
 
