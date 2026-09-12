@@ -268,6 +268,7 @@
     }
 
     function initChatView() {
+      chatHistory = [];
       document.getElementById('loginView').classList.add('hidden');
       document.getElementById('chatView').classList.remove('hidden');
 
@@ -485,6 +486,7 @@
       sessionStorage.clear();
       token = null;
       currentUser = null;
+      chatHistory = [];
       document.getElementById('chatView').classList.add('hidden');
       document.getElementById('loginView').classList.remove('hidden');
     }
