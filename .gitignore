@@ -50,6 +50,8 @@ Thumbs.db
 *.log
 logfire/
 
-# Evaluation outputs (large, generated)
-backend/eval/results/
+# Evaluation outputs
+backend/eval/results/*
+!backend/eval/results/evaluation_report.md
+!backend/eval/results/evaluation_results.json
 

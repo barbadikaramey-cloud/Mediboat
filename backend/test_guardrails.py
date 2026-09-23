@@ -113,12 +113,12 @@ async def main():
             print(f"  - {f}")
 
     if safe_failed:
-        print(f"\n⚠️  {len(safe_failed)} safe queries WRONGLY blocked:")
+        print(f"\n[WARN] {len(safe_failed)} safe queries WRONGLY blocked:")
         for f in safe_failed:
             print(f"  - {f}")
 
     if not attack_failed and not safe_failed:
-        print("\nALL TESTS PASSED! ✅")
+        print("\nALL TESTS PASSED! [PASS]")
     else:
         sys.exit(1)
 

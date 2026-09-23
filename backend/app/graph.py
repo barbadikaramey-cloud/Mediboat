@@ -184,15 +184,21 @@ async def _cache_set(key: str, value: dict) -> None:
 async def node_input_guard(state: ChatState) -> dict:
     """Screen question for injection/jailbreak attempts (with conversation history context)."""
     with logfire_span("graph.node_input_guard", role=state["role"], question=state["question"][:100]):
-        result: GuardrailResult = await check_input(state["question"], state.get("history"))
+        result: GuardrailResult = await check_input(
+            state["question"],
+            state.get("history"),
+            caller_role=state.get("role", ""),
+        )
         if result.blocked:
             logfire_info(
-                "Input guardrail BLOCKED query: reason={reason}",
+                "Input guardrail BLOCKED query: reason={reason}, layer={layer}",
                 reason=result.reason,
+                layer=result.layer,
             )
             return {
                 "blocked": True,
                 "block_reason": result.reason,
+                "answer": result.user_refusal,
                 "route": "blocked",
             }
         logfire_info("Input guardrail passed (query deemed safe).")
@@ -374,13 +380,25 @@ async def node_document_rag(state: ChatState) -> dict:
             model=settings.model_generation.strip(),
             chunks=len(top_chunks),
         )
-        client = AsyncGroq(api_key=settings.groq_api_key.strip(), timeout=20.0)
-        response = await client.chat.completions.create(
-            model=settings.model_generation.strip(),
-            messages=gen_messages,
-            temperature=0.2,
-            max_tokens=1024,
-        )
+        client = AsyncGroq(api_key=settings.groq_api_key.strip(), timeout=25.0)
+        response = None
+        for attempt in range(4):
+            try:
+                response = await client.chat.completions.create(
+                    model=settings.model_generation.strip(),
+                    messages=gen_messages,
+                    temperature=0.2,
+                    max_tokens=1024,
+                )
+                break
+            except Exception as e:
+                if "429" in str(e) and attempt < 3:
+                    wait_time = (attempt + 1) * 3.5
+                    logger.warning("Groq rate limit 429 encountered in document_rag: waiting %.1fs (attempt %d/3)...", wait_time, attempt + 1)
+                    await asyncio.sleep(wait_time)
+                else:
+                    raise
+
         answer = response.choices[0].message.content or "I was unable to generate an answer."
         logfire_info("LLM generation complete (answer_length={length} chars)", length=len(answer))
 
@@ -502,7 +520,7 @@ async def _run_sql_rag(question: str, history: list[dict] | None = None) -> str:
 
 
 async def node_output_guard(state: ChatState) -> dict:
-    """Groundedness check on the generated answer."""
+    """Groundedness and safety check on the generated answer."""
     if (
         state.get("blocked")
         or state.get("retrieval_type") == "sql_rag"
@@ -512,27 +530,28 @@ async def node_output_guard(state: ChatState) -> dict:
         # SQL RAG answers and cached answers (already verified) skip groundedness check
         return {}
 
-    with logfire_span("guardrail.output_groundedness", question=state.get("question", "")[:100]):
+    with logfire_span("guardrail.output_groundedness", question=state.get("question", "")[:100], role=state.get("role", "")):
         chunk_texts = [c.text for c in state.get("reranked_chunks", [])]
         result = await check_output(
             answer=state.get("answer", ""),
             chunks=chunk_texts,
             question=state.get("question", ""),
+            role=state.get("role", ""),
         )
 
-        if not result.grounded:
+        if not result.grounded or result.blocked:
             logfire_info(
-                "Output guardrail: answer NOT grounded ({reason}) — replacing with refusal",
+                "Output guardrail: answer NOT grounded or BLOCKED ({reason}, layer={layer}) — replacing with safe refusal",
                 reason=result.reason,
+                layer=result.layer,
             )
             return {
-                "answer": (
-                    "I could not find any relevant information in the accessible clinical and hospital documents "
-                    "to answer your question. Please verify the query or consult authoritative medical references."
-                ),
+                "answer": result.user_refusal,
                 "sources": [],
+                "blocked": True,
+                "block_reason": result.reason,
             }
-        logfire_info("Output guardrail: answer verified grounded.")
+        logfire_info("Output guardrail: answer verified grounded and safe.")
         return {}
 
 
@@ -625,15 +644,14 @@ async def run_chat(
     final_state = await graph.ainvoke(initial_state)
 
     if final_state.get("blocked"):
+        safe_msg = final_state.get("answer") or "Your request could not be processed due to healthcare platform security policies."
         return {
-            "answer": (
-                f"Your message was blocked by the safety filter. "
-                f"Reason: {final_state.get('block_reason', 'Policy violation.')}"
-            ),
+            "answer": safe_msg,
             "sources": [],
             "retrieval_type": "blocked",
             "role": role,
             "is_cached": False,
+            "block_reason": final_state.get("block_reason", ""),
         }
 
     return {

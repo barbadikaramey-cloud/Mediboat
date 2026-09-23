@@ -115,6 +115,21 @@ def _run_sql(db_path: str, sql: str) -> list[dict]:
         engine.dispose()
 
 
+def _call_groq_with_retry(client: Groq, **kwargs) -> Any:
+    """Execute Groq chat completion with retry backoff on 429 rate limits."""
+    import time
+    for attempt in range(4):
+        try:
+            return client.chat.completions.create(**kwargs)
+        except Exception as e:
+            if "429" in str(e) and attempt < 3:
+                wait_time = (attempt + 1) * 3.5
+                logger.warning("Groq 429 rate limit encountered in SQL RAG: waiting %.1fs...", wait_time)
+                time.sleep(wait_time)
+            else:
+                raise
+
+
 def sql_rag_chain(question: str, history: list[dict] | None = None) -> str:
     """Run the three-step SQL RAG chain and return a natural language answer.
 
@@ -149,7 +164,8 @@ def sql_rag_chain(question: str, history: list[dict] | None = None) -> str:
         nl2sql_messages.append({"role": "user", "content": question})
 
         with logfire_span("sql_rag.generate_sql_llm"):
-            nl2sql_response = client.chat.completions.create(
+            nl2sql_response = _call_groq_with_retry(
+                client,
                 model=settings.model_generation.strip(),  # 70B for NL→SQL quality
                 messages=nl2sql_messages,
                 temperature=0,
@@ -200,7 +216,8 @@ def sql_rag_chain(question: str, history: list[dict] | None = None) -> str:
         })
 
         with logfire_span("sql_rag.synthesize_answer_llm"):
-            answer_response = client.chat.completions.create(
+            answer_response = _call_groq_with_retry(
+                client,
                 model=settings.model_generation.strip(),
                 messages=answer_messages,
                 temperature=0.2,

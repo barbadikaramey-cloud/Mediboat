@@ -59,6 +59,10 @@ app = FastAPI(
 # Observability (Logfire middleware + LangSmith tracing)
 setup_observability(app)
 
+# HIPAA Safe Harbor & PII Masking Middleware (de-identify requests and responses)
+from app.middleware import HIPAAMaskingMiddleware
+app.add_middleware(HIPAAMaskingMiddleware)
+
 # CORS — restrict to known frontend origins in prod
 _settings = get_settings()
 app.add_middleware(
