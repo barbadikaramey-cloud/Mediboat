@@ -120,12 +120,12 @@ def generate_markdown_report(data: dict[str, Any]) -> str:
         "",
         "## 📋 Granular Per-Question Evaluation Matrix",
         "",
-        "| ID | Role | Question Excerpt | Category | Retrieval Route | Heuristics | Judge Score | Guardrail Status |",
+        "| ID | Role | Full Evaluated Question | Category | Retrieval Route | Heuristics | Judge Score | Guardrail Status |",
         "|---|---|---|---|:---:|:---:|:---:|:---:|",
     ])
 
     for row in per_q:
-        q_text = row.get("question", "")[:45] + ("..." if len(row.get("question", "")) > 45 else "")
+        q_text = row.get("question", "").strip().replace("|", "\\|")
         h_status = "✅ Pass" if row.get("heuristics_passed", True) else "❌ Fail"
         g_status = "🛡 Blocked" if row.get("blocked", False) else "🟢 Allowed"
         lines.append(
