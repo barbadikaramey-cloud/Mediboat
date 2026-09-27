@@ -155,9 +155,10 @@ async def check_output(
             layer="bypass_no_chunks",
         )
 
-    # 3. Strict LLM Clinical NLI & Relevance Check (Structured JSON + Fail-Closed)
+    # 3. OpenEvals-Powered Clinical NLI & Relevance Guardrail (Structured Verdict + Fail-Closed)
     try:
-        from groq import AsyncGroq
+        from openevals.llm import create_async_llm_as_judge
+        from langchain_groq import ChatGroq
         from app.config import get_settings
 
         settings = get_settings()
@@ -172,93 +173,52 @@ async def check_output(
                 flagged_categories=["system_error"],
             )
 
-        client = AsyncGroq(api_key=settings.groq_api_key.strip(), timeout=12.0)
         context_snippet = "\n---\n".join(chunks[:3])[:2500]
 
-        system_prompt = (
+        eval_prompt = (
             "You are an uncompromising clinical factuality and NLI groundedness auditor for a healthcare RAG system.\n"
             "Task: Determine whether the Generated Answer is fully grounded in and supported by the Context excerpts.\n\n"
             "STRICT AUDIT RULES:\n"
             "1. RELEVANCE & ACCURACY: Factual clinical statements, medical protocols, and dosages must be faithfully supported by or synthesized from the Context excerpts.\n"
             "2. HONEST BOUNDARIES ALLOWED: Explicit statements acknowledging that certain details, numbers, or out-of-scope topics are absent from the hospital documents (e.g. 'The provided documents do not contain contact details for...') are VALID grounded boundary statements and must NOT be blocked.\n"
-            "3. UNGROUNDED EXTERNAL SPECULATION: If the Answer introduces ungrounded external workflows, unverified contact methods, external directories, or fabricated clinical numbers not supported by the Context, output 'blocked'.\n"
-            "4. ENTAILMENT: If the Answer is faithfully derived from the Context excerpts and adheres to documented scope, output 'passed'.\n\n"
-            "MANDATORY JSON OUTPUT FORMAT:\n"
-            "Respond ONLY with a valid JSON object matching this schema:\n"
-            "{\n"
-            '  "verdict": "passed" | "blocked",\n'
-            '  "grounded": true | false,\n'
-            '  "reason": "<concise clinical audit reason>"\n'
-            "}"
+            "3. UNGROUNDED EXTERNAL SPECULATION: If the Answer introduces ungrounded external workflows, unverified contact methods, external directories, or fabricated clinical numbers not supported by the Context, mark as ungrounded (false).\n"
+            "4. ENTAILMENT: If the Answer is faithfully derived from the Context excerpts and adheres to documented scope, mark as grounded (true).\n\n"
+            "User Question:\n{inputs}\n\n"
+            "Context Excerpts:\n{context}\n\n"
+            "Generated Answer:\n{outputs}\n"
         )
 
-        user_content = (
-            f"User Question:\n{question}\n\n"
-            f"Context excerpts:\n{context_snippet}\n\n"
-            f"Generated Answer:\n{answer[:1200]}"
+        judge_llm = ChatGroq(
+            model=settings.model_cheap.strip(),
+            api_key=settings.groq_api_key.strip(),
+            temperature=0.0,
+            timeout=15.0,
         )
 
-        import asyncio
-        response = None
-        for attempt in range(4):
-            try:
-                response = await client.chat.completions.create(
-                    model=settings.model_cheap.strip(),
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_content},
-                    ],
-                    temperature=0,
-                    max_tokens=1024,
-                )
-                break
-            except Exception as e:
-                if "429" in str(e) and attempt < 3:
-                    wait_time = (attempt + 1) * 3.0
-                    logger.warning("Output guardrail 429 rate limit: retrying in %.1fs...", wait_time)
-                    await asyncio.sleep(wait_time)
-                else:
-                    raise
+        openevals_judge = create_async_llm_as_judge(
+            prompt=eval_prompt,
+            judge=judge_llm,
+            continuous=False,
+        )
 
-        raw_text = (response.choices[0].message.content or "").strip()
-        logger.info("Output guardrail LLM raw text: %s", raw_text)
+        eval_result = await openevals_judge(
+            inputs=question,
+            outputs=answer[:1200],
+            context=context_snippet,
+        )
 
-        json_match = re.search(r"\{.*\}", raw_text, re.DOTALL)
-        parsed = {}
-        if json_match:
-            try:
-                parsed = json.loads(json_match.group(0))
-            except Exception:
-                pass
+        # OpenEvals returns a structured dict: {'key': 'score', 'score': True/False, 'comment': '...'}
+        is_grounded = bool(eval_result.get("score", False))
+        audit_reason = str(eval_result.get("comment") or eval_result.get("reasoning") or "").strip()
+        logger.info("OpenEvals output guardrail verdict: grounded=%s, reason=%s", is_grounded, audit_reason[:80])
 
-        if not parsed:
-            try:
-                parsed = json.loads(raw_text)
-            except Exception:
-                # Resilient fallback: extract structured fields via regex
-                v_match = re.search(r'"verdict"\s*:\s*"([^"]+)"', raw_text)
-                g_match = re.search(r'"grounded"\s*:\s*(true|false)', raw_text, re.IGNORECASE)
-                r_match = re.search(r'"reason"\s*:\s*"([^"]*)', raw_text)
-                if v_match and g_match:
-                    parsed = {
-                        "verdict": v_match.group(1),
-                        "grounded": g_match.group(1).lower() == "true",
-                        "reason": r_match.group(1) if r_match else "Extracted from structured output"
-                    }
-                else:
-                    raise
-
-        llm_verdict = str(parsed.get("verdict", "")).strip().lower()
-        is_grounded = bool(parsed.get("grounded", False))
-        audit_reason = str(parsed.get("reason", "Output factuality audit completed.")).strip()
-
-        if llm_verdict == "passed" and is_grounded:
+        if is_grounded:
             return OutputGuardrailResult(
                 verdict="passed",
                 grounded=True,
                 blocked=False,
-                reason="Answer strictly entailed by retrieved clinical context.",
-                layer="llm_nli_groundedness",
+                reason="Answer strictly entailed by retrieved clinical context (OpenEvals verified).",
+                layer="openevals_nli_groundedness",
                 flagged_categories=[],
             )
         else:
@@ -266,24 +226,14 @@ async def check_output(
                 verdict="blocked",
                 grounded=False,
                 blocked=True,
-                reason=audit_reason or "Answer contains clinical claims not supported by retrieved excerpts.",
-                layer="llm_nli_groundedness",
+                reason=audit_reason or "Answer contains clinical claims or directions not supported by retrieved excerpts.",
+                layer="openevals_nli_groundedness",
                 flagged_categories=["ungrounded_claims", "hallucination_risk"],
             )
 
-    except json.JSONDecodeError as jde:
-        logger.error("Output guardrail JSON parse error: %s — FAILING CLOSED", jde)
-        return OutputGuardrailResult(
-            verdict="blocked",
-            grounded=False,
-            blocked=True,
-            reason=f"Fail-closed: Groundedness auditor returned malformed JSON ({jde})",
-            layer="fail_closed_parser",
-            flagged_categories=["json_decode_error"],
-        )
     except Exception as exc:
         # STRICT FAIL-CLOSED REQUIREMENT: Any API or network failure triggers block!
-        logger.error("Output guardrail error or timeout: %s — FAILING CLOSED", exc)
+        logger.error("OpenEvals output guardrail error or timeout: %s — FAILING CLOSED", exc)
         return OutputGuardrailResult(
             verdict="blocked",
             grounded=False,

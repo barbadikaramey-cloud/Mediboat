@@ -711,10 +711,10 @@ flowchart TD
     MD_REP --> JSON_REP
 ```
 
-#### Component 1: Dual-Tier Guardrails & Fail-Closed Defense
+#### Component 1: Dual-Tier Guardrails & Fail-Closed Defense (Powered by OpenEvals)
 * **Layer 1 (Regex Fast-Block)**: Blocks known prompt injection, DAN mode, and exfiltration patterns in `< 10 ms`.
-* **Layer 2 (LLM Safety Classifier)**: Evaluates semantic intent using `openai/gpt-oss-20b` with structured JSON output.
-* **Fail-Closed Guarantee**: Network errors, rate limits, or truncated JSON automatically fail closed (`verdict: "blocked"`), ensuring zero risk of jailbreak pass-through.
+* **Layer 2 (OpenEvals NLI Groundedness Guardrail)**: Evaluates semantic groundedness, clinical factuality, and scope boundaries using `openevals.llm.create_async_llm_as_judge` with structured verdicts (`passed`/`blocked`).
+* **Fail-Closed Guarantee**: Network errors, rate limits, or truncated JSON automatically fail closed (`verdict: "blocked"`), ensuring zero risk of ungrounded or adversarial pass-through.
 * **Client Privacy Shield**: Internal regex patterns and block reasons are logged for HIPAA compliance but never echoed to users.
 
 #### Component 2: Enterprise Telemetry (Logfire & LangSmith)
@@ -729,8 +729,8 @@ Comprises 22 clinically vetted test cases covering all 5 hospital roles:
 * **Equipment Maintenance** (`tech.anand`): DriveFlow IP-200 programming steps, BM-500 fault code E-12 mandatory removal from service.
 * **Adversarial & Safety Traps**: Prompt injections, DAN mode, cross-role RBAC privilege escalation (nursing accessing claims), hallucination traps (pediatric methotrexate for rhinitis), and off-topic requests (World Cup essay).
 
-#### Component 4: Independent LLM-as-a-Judge (`eval/judge.py`)
-* Evaluates answers using `openai/gpt-oss-20b` (Groq LPU, temperature=0.0) across a 4-dimensional rubric:
+#### Component 4: Independent LLM-as-a-Judge (`eval/judge.py` with OpenEvals)
+* Evaluates answers using **OpenEvals** (`openevals.llm.create_async_llm_as_judge`) powered by `openai/gpt-oss-20b` (Groq LPU, temperature=0.0) across a 4-dimensional rubric:
   1. **Clinical Factual Accuracy (1-5)**: Verifies exact factual alignment with ingested hospital protocols.
   2. **Answer Completeness (1-5)**: Checks that all clinical constraints, dosages, and warnings are covered.
   3. **Appropriate Refusal (1-5)**: Verifies that unauthorized queries and injections are refused politely without leaking system prompts.
@@ -763,7 +763,7 @@ Outputs generated:
 | **LLM Inference** | **Groq Cloud LPU** (`gpt-oss-120b` & `gpt-oss-20b`) | OpenAI GPT-4o / Anthropic Claude 3.5 Sonnet | **Throughput & Latency**: Groq LPU delivers 300+ tokens/sec, reducing RAG synthesis to `< 400 ms` compared to 2.5s+ on cloud APIs, crucial for emergency room clinicians. |
 | **Dense Embeddings** | **FastEmbed ONNX** (`BAAI/bge-small-en-v1.5`) | OpenAI `text-embedding-3-small` | **Zero Egress & Zero Cost**: FastEmbed runs locally in-process on CPU in `22 ms`, avoiding external API calls, reducing per-query costs to $0.00, and keeping clinical text on-premise. |
 | **Hybrid Search** | **Qdrant Native RRF** (Dense + Sparse BM25) | Dense-only Pinecone / Chroma | **Clinical Terminology Matching**: Pure dense vector search frequently fails on exact drug brand names, dosages (`4.5 g Q8H`), and ICD-10 codes (`J18.9`). Native BM25 guarantees keyword recall. |
-| **Guardrails** | **Dual-Tier Fast-Path + LLM** | Pure LLM Guardrails (NeMo / Llama-Guard) | **Latency & Cost**: Pure LLM guardrails add 500-1000ms to every request. MediBot's Tier 1 regex screens safe medical queries in `< 1 ms`, cutting guardrail API costs by 90%. |
+| **Guardrails & Evaluation** | **OpenEvals + Fast-Path Regex** | Cloud Guardrails (AWS Bedrock Guardrails) | **Latency, Cost & Open Source**: OpenEvals (`openevals==0.2.0`) powers structured NLI groundedness guardrails and rubric-based judging, while Tier 1 regex screens safe medical queries in `< 1 ms`, cutting latency and costs by 90%. |
 | **Access Control** | **Pre-Retrieval Cryptographic Vector Filtering** | Prompt-based System Instructions | **Zero-Trust Security**: Prompt instructions (*"Do not show nurses billing data"*) are susceptible to jailbreaks. Vector-level filtering physically excludes restricted points from similarity search. |
 
 ---
