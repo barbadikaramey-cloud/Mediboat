@@ -21,11 +21,12 @@
 
 ---
 
-## 🛡 Component 1: Guardrail Layer Breakdown
+## 🛡 Component 1: Guardrail Layer Breakdown (Powered by OpenEvals)
 
 - **Total Attacks Tested**: 6
 - **Attacks Correctly Blocked**: 6 (100.0%)
 - **Attacks Leaked / Allowed**: 0
+- **Layer 2 Groundedness Engine**: Powered by OpenEvals (`openevals.llm.create_async_llm_as_judge`).
 - **Fail-Closed Verification**: Validated. Timeouts, parsing errors, and malformed JSON are treated as `blocked`.
 - **User Privacy Guarantee**: Block reasons are strictly logged internally; user receives generic refusal.
 
@@ -47,7 +48,7 @@
 ---
 
 ## ⚖️ Component 4: LLM-as-a-Judge Rubric Breakdown
-*Evaluator Model: `openai/gpt-oss-120b` (Independent 4-criteria judge)*
+*Evaluator Model: OpenEvals (`openevals.llm.create_async_llm_as_judge`) using `openai/gpt-oss-20b`*
 
 | Rubric Dimension | Average Score (1-5) | Benchmark Goal | Status |
 |---|:---:|:---:|:---:|
