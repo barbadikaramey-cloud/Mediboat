@@ -467,8 +467,16 @@
         });
 
         if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.detail || 'Request failed');
+          let errorMsg = `Server error (${res.status})`;
+          try {
+            const err = await res.json();
+            errorMsg = err.detail || err.message || errorMsg;
+          } catch (_) {
+            if (res.status === 502) errorMsg = 'Service temporarily unavailable (502 Bad Gateway). Please retry in a moment.';
+            else if (res.status === 504) errorMsg = 'Gateway timeout (504). Please retry with a shorter prompt.';
+            else if (res.status === 401) errorMsg = 'Session expired. Please sign in again.';
+          }
+          throw new Error(errorMsg);
         }
 
         const data = await res.json();

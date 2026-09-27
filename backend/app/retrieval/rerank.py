@@ -10,7 +10,6 @@ This is more accurate than cosine similarity for relevance scoring.
 from __future__ import annotations
 
 import logging
-
 from typing import Any
 
 from app.config import get_settings
@@ -27,6 +26,7 @@ def _get_cross_encoder() -> Any:
     global _cross_encoder
     if _cross_encoder is None:
         from sentence_transformers import CrossEncoder
+
         settings = get_settings()
         logger.info("Loading CrossEncoder: %s", settings.reranker_model)
         # Explicitly disable low_cpu_mem_usage to prevent meta-tensor loading
@@ -47,21 +47,24 @@ def rerank(
     query: str,
     chunks: list[RetrievedChunk],
     top_n: int | None = None,
+    score_floor: float | None = None,
     **kwargs,
 ) -> list[RetrievedChunk]:
-    """Rerank retrieved chunks using CrossEncoder or native Qdrant RRF scores.
-    Relevance, factuality, and refusal decisions are strictly enforced by the downstream NLI prompts.
+    """Rerank retrieved chunks using CrossEncoder; return chunks passing relevance floor up to top_n.
+    If no relevant content is found (all scores < floor), returns [] for deterministic refusal.
 
     Args:
-        query:  The user's original or contextualized question.
-        chunks: Broad candidate set (e.g. from hybrid search).
-        top_n:  Number of top reranked chunks to return (default: settings.rerank_top_n).
+        query:       The user's original or contextualized question.
+        chunks:      Broad candidate set (e.g. from hybrid search).
+        top_n:       Maximum number of chunks to return (default: settings.rerank_top_n).
+        score_floor: Minimum CrossEncoder logit score (default: settings.ce_relevance_floor).
 
     Returns:
-        List of RetrievedChunk sorted by score desc, truncated to top_n.
+        List of RetrievedChunk sorted by CrossEncoder score desc that pass score_floor.
     """
     settings = get_settings()
     n = top_n or settings.rerank_top_n
+    floor = score_floor if score_floor is not None else settings.ce_relevance_floor
 
     if not chunks:
         return []
@@ -69,7 +72,7 @@ def rerank(
     if not settings.use_cross_encoder:
         # High-efficiency path for 512MB RAM containers (Render free tier):
         # Qdrant native Reciprocal Rank Fusion (RRF) has already scored and sorted candidates.
-        # Avoids loading PyTorch (~400MB RAM), keeping memory under 240MB and eliminating OOM crashes.
+        # Avoids loading PyTorch (~400MB RAM), keeping memory under 220MB and eliminating OOM crashes.
         logfire_info(
             "Using Qdrant native RRF ranking ({candidates} candidates -> top {kept})",
             candidates=len(chunks),
@@ -121,25 +124,34 @@ def rerank(
         # Log reranking reordering and individual scores
         for new_rank, (score, chunk) in enumerate(scored[:max(n, 5)]):
             original_rank = chunks.index(chunk)
+            passed = "PASS" if score >= floor else "FAIL_FLOOR"
             logfire_info(
-                "Rerank [{orig}→{new}] score={score:.4f} | {doc} | {sec}",
+                "Rerank [{orig}→{new}] score={score:.4f} [{passed}] | {doc} | {sec}",
                 orig=original_rank,
                 new=new_rank,
                 score=score,
+                passed=passed,
                 doc=chunk.source_document,
                 sec=chunk.section_title[:60] if chunk.section_title else "(no section)",
             )
 
-        # Keep top_n reranked chunks (no floor filtering; strong NLI prompts govern refusal)
+        # Filter chunks that meet the relevance floor and take up to top_n
         top_chunks: list[RetrievedChunk] = []
-        for score, chunk in scored[:n]:
+        for score, chunk in scored:
+            if score < floor:
+                continue
             chunk.score = score  # update score to CE score for transparency
             top_chunks.append(chunk)
+            if len(top_chunks) >= n:
+                break
 
+        floor_triggered = len(top_chunks) == 0
         logfire_info(
-            "Reranked {candidates} candidates -> top {kept} chunks (floor disabled, NLI prompt enforces relevance)",
+            "Reranked {candidates} candidates -> {kept} chunks passing floor {floor:.2f} (floor_triggered={triggered})",
             candidates=len(chunks),
             kept=len(top_chunks),
+            floor=floor,
+            triggered=floor_triggered,
             top_score=top_chunks[0].score if top_chunks else None,
         )
         return top_chunks

@@ -220,10 +220,13 @@ class HIPAAMaskingMiddleware(BaseHTTPMiddleware):
                     logger.info("HIPAA Middleware: Redacted %d PHI/PII entities from outbound response", outbound_redactions)
 
                 new_resp_bytes = json.dumps(resp_data).encode("utf-8")
+                headers = dict(response.headers)
+                headers.pop("content-length", None)
+                headers.pop("Content-Length", None)
                 return Response(
                     content=new_resp_bytes,
                     status_code=response.status_code,
-                    headers=dict(response.headers),
+                    headers=headers,
                     media_type="application/json",
                 )
             except Exception as exc:
