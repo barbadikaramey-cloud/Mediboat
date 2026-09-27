@@ -52,7 +52,7 @@ flowchart TD
 
     subgraph Guardrails["Multi-Tier Guardrail Pipeline"]
         IG["Tier 1: Fast-Path Regex Allow/Deny"]
-        CL["Tier 2: Llama-3.1-8B Safety Classifier"]
+        CL["Tier 2: OpenAI GPT-OSS-20B Safety Classifier"]
     end
 
     subgraph RouterEngine["Adaptive Intent Router"]
@@ -62,17 +62,17 @@ flowchart TD
     subgraph RetrievalEngine["Unstructured Document RAG"]
         QDRANT[("Qdrant Cloud Vector DB<br/>(Dense BGE + Sparse BM25)")]
         CE["Optional Cross-Encoder MiniLM Reranker"]
-        DOC_LLM["LLM Generation Engine<br/>(OpenAI GPT-OSS-120B / Llama 70B)"]
+        DOC_LLM["LLM Generation Engine<br/>(OpenAI GPT-OSS-120B)"]
     end
 
     subgraph AnalyticalEngine["Structured SQL RAG"]
         SCHEMA["In-Memory Relational Schema"]
-        SQL_GEN["NL-to-SQL Compiler<br/>(Context-Continuous 120B)"]
+        SQL_GEN["NL-to-SQL Compiler<br/>(OpenAI GPT-OSS-120B)"]
         SQLITE[("Operational SQLite Database<br/>(Auto-Seeded mediassist.db)")]
     end
 
     subgraph VerificationEngine["Verification and Output Engine"]
-        OG["NLI Groundedness & Citation Pruning<br/>(Sentence-Level Audit Option B)"]
+        OG["OpenEvals Groundedness & Citation Pruning<br/>(Sentence-Level Audit Option B)"]
         CACHE[("Upstash Redis L2 Cache")]
         OUT["Synthesized Response with Verified Citations"]
     end
@@ -265,7 +265,7 @@ sequenceDiagram
     participant App as MediBot Backend
     participant Qdrant as Qdrant Cloud
     participant CE as Local Cross-Encoder
-    participant Groq as Groq LPU (70B)
+    participant Groq as Groq LPU (OpenAI GPT-OSS-120B)
 
     User->>App: Submits question ("ICU ventilator pneumonia protocol")
     App->>App: Generates Dense Vector (BGE-Small) & BM25 Sparse Vector
@@ -322,7 +322,7 @@ flowchart TD
     subgraph InputGuardrail["Input Security Guardrail"]
         FP{"Regex Allowlist Fast-Path<br/>(Common Clinical Terms)"}
         RGX{"Regex Jailbreak Scanner<br/>(Prompt Injection Signatures)"}
-        LLM_GUARD{"Llama-3.1-8B Classifier<br/>(Semantic Attack Evaluation)"}
+        LLM_GUARD{"OpenAI GPT-OSS-20B Classifier<br/>(Semantic Attack Evaluation)"}
     end
     
     Q --> FP
@@ -333,9 +333,9 @@ flowchart TD
     LLM_GUARD -->|Approved| PASS
     LLM_GUARD -->|Malicious Intent| BLOCK
 
-    subgraph OutputGuardrail["Output Groundedness Guardrail"]
+    subgraph OutputGuardrail["Output Groundedness Guardrail (OpenEvals)"]
         GEN["Generated Answer + Top-3 Chunks"]
-        NLI{"NLI Factual Verification<br/>(Llama-3.1-8B Fast Audit)"}
+        NLI{"OpenEvals NLI Verification<br/>(GPT-OSS-20B Fast Audit)"}
     end
     
     PASS --> GEN
@@ -833,7 +833,7 @@ MediBot leverages **LangSmith** to monitor LLM invocations, token throughput, sa
 </div>
 
 * **Per-Node Performance Profiling**:
-  * **Input & Output Guardrails** (`input_guard`, `output_guard`): Regex fast-path checks execute in `< 10ms`, while secondary Llama-3.1-8B safety classifiers evaluate in `~0.25s – 0.40s`.
+  * **Input & Output Guardrails** (`input_guard`, `output_guard`): Regex fast-path checks execute in `< 10ms`, while secondary OpenAI GPT-OSS-20B safety classifiers evaluate in `~0.25s – 0.40s`.
   * **Adaptive Intent Router** (`router`): Sub-second routing decision categorizes prompts into clinical guideline retrieval vs. financial SQL queries.
   * **RAG & SQL Synthesis** (`document_rag`, `sql_rag`): Groq LPU inference powers high-throughput generation (`~1.5s – 3.5s`), drastically minimizing clinical wait times.
 

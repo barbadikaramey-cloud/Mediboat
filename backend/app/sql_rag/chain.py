@@ -1,7 +1,7 @@
 """SQL RAG chain: NL → SQL → execute → NL answer.
 
 Three explicit steps (per spec):
-  1. LLM (70B) translates the natural language question → SQL
+  1. LLM (OpenAI GPT-OSS-120B) translates the natural language question → SQL
   2. Strip markdown fences / explanation text → extract bare SQL
   3. Execute against SQLite → pass result back to LLM → natural language answer
 
@@ -134,9 +134,9 @@ def sql_rag_chain(question: str, history: list[dict] | None = None) -> str:
     """Run the three-step SQL RAG chain and return a natural language answer.
 
     Steps:
-      1. NL → SQL (Llama 3.3 70B, with conversation history context)
+      1. NL → SQL (OpenAI GPT-OSS-120B, with conversation history context)
       2. Strip SQL from LLM output
-      3. Execute → pass result to LLM → NL answer (Llama 3.3 70B)
+      3. Execute → pass result to LLM → NL answer (OpenAI GPT-OSS-120B)
     """
     settings = get_settings()
     client = Groq(api_key=settings.groq_api_key.strip())
@@ -166,7 +166,7 @@ def sql_rag_chain(question: str, history: list[dict] | None = None) -> str:
         with logfire_span("sql_rag.generate_sql_llm"):
             nl2sql_response = _call_groq_with_retry(
                 client,
-                model=settings.model_generation.strip(),  # 70B for NL→SQL quality
+                model=settings.model_generation.strip(),  # 120B for NL→SQL quality
                 messages=nl2sql_messages,
                 temperature=0,
                 max_tokens=1024,

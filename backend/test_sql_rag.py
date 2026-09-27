@@ -25,7 +25,7 @@ TEST_QUESTIONS = [
 
 def main():
     print("=" * 60)
-    print("TESTING SQL RAG CHAIN (Llama 3.3 70B via Groq + SQLite)")
+    print("TESTING SQL RAG CHAIN (OpenAI GPT-OSS-120B via Groq + SQLite)")
     print("=" * 60)
 
     for i, q in enumerate(TEST_QUESTIONS, 1):
