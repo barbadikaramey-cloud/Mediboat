@@ -24,7 +24,7 @@ from sqlalchemy import create_engine, text
 
 from app.config import get_settings
 from app.observability import logfire_info, logfire_span
-from app.sql_rag.masking import apply_role_masking
+from app.middleware.sql_masking import apply_role_masking
 
 logger = logging.getLogger(__name__)
 

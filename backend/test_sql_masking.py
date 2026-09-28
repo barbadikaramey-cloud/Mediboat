@@ -11,7 +11,7 @@ if hasattr(sys.stdout, "reconfigure"):
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
-from app.sql_rag.masking import (
+from app.middleware.sql_masking import (
     anonymize_patient_name,
     apply_role_masking,
     generalize_icd_code,
