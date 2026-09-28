@@ -498,7 +498,7 @@ async def node_sql_rag(state: ChatState) -> dict:
             return {**cached, "cache_key": cache_key, "is_cached": True}
 
         logfire_info("SQL RAG cache MISS for role={role}. Executing NL to SQL chain.", role=role)
-        answer = await _run_sql_rag(question, history)
+        answer = await _run_sql_rag(question, history, role)
 
         result = {
             "answer": answer,
@@ -518,12 +518,12 @@ async def node_sql_rag(state: ChatState) -> dict:
         return result
 
 
-async def _run_sql_rag(question: str, history: list[dict] | None = None) -> str:
-    """Async wrapper around the synchronous sql_rag_chain."""
+async def _run_sql_rag(question: str, history: list[dict] | None = None, role: str = "admin") -> str:
+    """Async wrapper around the synchronous sql_rag_chain with role-based masking."""
     import asyncio
     from app.sql_rag.chain import sql_rag_chain
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, sql_rag_chain, question, history)
+    return await loop.run_in_executor(None, lambda: sql_rag_chain(question, history, role=role))
 
 
 async def node_output_guard(state: ChatState) -> dict:

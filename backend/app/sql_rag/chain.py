@@ -24,6 +24,7 @@ from sqlalchemy import create_engine, text
 
 from app.config import get_settings
 from app.observability import logfire_info, logfire_span
+from app.sql_rag.masking import apply_role_masking
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +82,10 @@ _ANSWER_SYSTEM = (
     "You are a helpful healthcare data analyst. "
     "Given a SQL query result, provide a complete and clear answer formatted with Markdown tables and bullet points. "
     "Show the full breakdown for all returned records without truncating or leaving rows out. "
-    "Format amounts readably (e.g., ₹ amounts with commas). Do not mention SQL syntax or internal database engine details."
+    "Format amounts readably (e.g., ₹ amounts with commas). Do not mention SQL syntax or internal database engine details.\n"
+    "Privacy & HIPAA Compliance: Patient names or staff names in the SQL result may appear masked (e.g., 'K**** P*****' or '[ANONYMIZED]') "
+    "in accordance with HIPAA de-identification standards. Present these identifiers exactly as formatted in the result; "
+    "never guess, unmask, or attempt to reconstruct original identities."
 )
 
 
@@ -130,13 +134,13 @@ def _call_groq_with_retry(client: Groq, **kwargs) -> Any:
                 raise
 
 
-def sql_rag_chain(question: str, history: list[dict] | None = None) -> str:
-    """Run the three-step SQL RAG chain and return a natural language answer.
+def sql_rag_chain(question: str, history: list[dict] | None = None, role: str = "admin") -> str:
+    """Run the three-step SQL RAG chain with role-based PII/PHI masking and return a natural language answer.
 
     Steps:
       1. NL → SQL (OpenAI GPT-OSS-120B, with conversation history context)
       2. Strip SQL from LLM output
-      3. Execute → pass result to LLM → NL answer (OpenAI GPT-OSS-120B)
+      3. Execute → Apply role-based PII/PHI masking → Pass to LLM → NL answer (OpenAI GPT-OSS-120B)
     """
     settings = get_settings()
     client = Groq(api_key=settings.groq_api_key.strip())
@@ -151,7 +155,7 @@ def sql_rag_chain(question: str, history: list[dict] | None = None) -> str:
         if h.get("role") in ("user", "assistant") and h.get("content")
     ]
 
-    with logfire_span("sql_rag.nl_to_sql_flow", question=question[:100]):
+    with logfire_span("sql_rag.nl_to_sql_flow", question=question[:100], role=role):
         # ── Step 1: NL → SQL ──────────────────────────────────────────────────
         logfire_info("SQL RAG generating SQL query for question='{question}'", question=question[:80])
         nl2sql_messages = [
@@ -186,19 +190,22 @@ def sql_rag_chain(question: str, history: list[dict] | None = None) -> str:
                 "Please rephrase your question and try again."
             )
 
-        # ── Step 3: Execute + NL answer ───────────────────────────────────────
+        # ── Step 3: Execute + Deterministic Masking + NL answer ───────────────
         with logfire_span("sql_rag.execute_sqlite", sql=sql):
             try:
-                rows = _run_sql(db_path, sql)
+                raw_rows = _run_sql(db_path, sql)
             except Exception as exc:
                 logger.error("SQL execution error: %s | SQL: %s", exc, sql)
                 logfire_info("SQL execution error: {error} | SQL: {sql}", error=str(exc), sql=sql)
                 return f"The query could not be executed: {exc}. Please rephrase your question."
 
-        logfire_info("SQLite returned {count} rows", count=len(rows))
+        logfire_info("SQLite returned {count} rows", count=len(raw_rows))
 
-        if not rows:
+        if not raw_rows:
             return "The query returned no results. The data may not exist in the current database."
+
+        # Apply deterministic role-based PII/PHI de-identification before passing to LLM
+        rows = apply_role_masking(raw_rows, role=role)
 
         # Format rows as a readable string for the LLM
         result_str = "\n".join(str(r) for r in rows[:50])  # cap at 50 rows to limit tokens
