@@ -12,7 +12,11 @@
 [![Logfire](https://img.shields.io/badge/Pydantic-Logfire_Telemetry-E92063?style=for-the-badge)](https://pydantic.dev/logfire)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
 
-[Live Demo](https://mediboat.onrender.com) • [Architecture](#-system-architecture) • [Security & RBAC](#-zero-trust-cryptographic-vector-rbac) • [Ingestion Pipeline](#-hierarchical-ingestion-pipeline) • [LangGraph Orchestration](#-langgraph-state-machine-orchestration) • [Hybrid RAG & Memory Optimization](#-hybrid-retrieval--memory-optimization) • [Text-to-SQL](#-deterministic-text-to-sql-analytical-engine) • [Guardrails & Groundedness](#-dual-tier-guardrails--groundedness-verification) • [Observability](#-enterprise-observability-telemetry--debugging) • [API Specification](#-api-specification)
+### ⚡ Quick Navigation Directory
+
+| 🏛 Architecture & Security | ⚙️ Processing & Data Engine | 🛡️ Compliance & Safety | 📊 Economics & Benchmarks |
+| :--- | :--- | :--- | :--- |
+| • [Executive Overview](#-executive-overview)<br/>• [System Architecture](#-system-architecture)<br/>• [Zero-Trust Vector RBAC](#-zero-trust-cryptographic-vector-rbac)<br/>• [Security Architecture](#-security--compliance-architecture) | • [Hierarchical Ingestion](#-hierarchical-ingestion-pipeline)<br/>• [LangGraph State Machine](#-langgraph-state-machine-orchestration)<br/>• [Hybrid RAG & Reranking](#-hybrid-retrieval--cross-encoder-reranking)<br/>• [Text-to-SQL Engine](#-deterministic-text-to-sql-analytical-engine) | • [HIPAA & Masking Policies](#-hipaa-safe-harbor-18-identifiers--pii-masking-middleware)<br/>• [In-Chat Masking Experience](#-in-chat-masking-experience--ui-verification)<br/>• [Dual-Tier Guardrails](#-dual-tier-guardrails--groundedness-verification)<br/>• [Adversarial Case Studies](#-documented-adversarial-case-studies) | • [Evaluation Platform](#-enterprise-ai-evaluation--guardrail-audit-platform)<br/>• [Observability & Telemetry](#-enterprise-observability-telemetry--debugging)<br/>• [Token Economics & Latency](#-token-economics--latency-benchmarks)<br/>• [API Specification & Quickstart](#-api-specification) |
 
 </div>
 
@@ -143,27 +147,33 @@ def build_qdrant_filter(role: str) -> Filter:
 
 ---
 
-## 🛡 HIPAA Safe Harbor (18 Identifiers) & PII Masking Middleware
+## 🛡 HIPAA Safe Harbor & Multi-Layer Privacy Architecture
 
-In accordance with **HIPAA 45 CFR § 164.514(b)(2)** (Safe Harbor De-identification Standard), all Protected Health Information (PHI) must be stripped of 18 statutory personal identifiers before transmission across external networks, vector database indexes, or third-party inference APIs (such as Groq Cloud LPU).
-
-MediBot deploys an asynchronous **ASGI Transport-Layer Middleware** (`backend/app/middleware/hipaa_masking.py`) registered directly in the FastAPI application lifecycle:
+In accordance with **HIPAA 45 CFR § 164.514(b)(2)** (Safe Harbor De-identification Standard) and the **HIPAA "Minimum Necessary" Rule (45 CFR § 164.502(b))**, Protected Health Information (PHI) and Personally Identifiable Information (PII) are scrubbed and de-identified across two distinct architectural boundaries:
 
 ```mermaid
-flowchart LR
-    IN["Inbound /chat Request<br/>(Client Question with PHI)"]
-    MW_IN["HIPAA Middleware<br/>(18 Safe Harbor Regex Engine)"]
-    CORE["Internal Core RAG Engine<br/>(Qdrant, LangGraph, Groq LPU)"]
-    MW_OUT["HIPAA Middleware<br/>(Output Masking & PHI Scrub)"]
-    OUT["Outbound /chat Response<br/>(Cryptographically Masked)"]
-
-    IN --> MW_IN
-    MW_IN -->|De-Identified Question| CORE
-    CORE -->|Synthesized Answer| MW_OUT
-    MW_OUT --> OUT
+flowchart TD
+    User["Hospital Staff (Inbound Request)"] --> TIER1_IN["Tier 1: ASGI HTTP Middleware\n(backend/app/middleware/hipaa_masking.py)\nScans text for SSN, Aadhaar, DOB, phone, email"]
+    TIER1_IN --> ROUTER["LangGraph Intent Router & RBAC Engine"]
+    
+    subgraph CoreEngine["Internal Execution Engine"]
+        ROUTER -->|Document RAG| QDRANT["Qdrant Vector DB (Sanitized Query)"]
+        ROUTER -->|SQL RAG| SQL_EXEC[("SQLite mediassist.db (SELECT Query)")]
+        SQL_EXEC --> RAW_ROWS["Raw Database Rows"]
+        RAW_ROWS --> TIER2["Tier 2: Relational SQL Masking Engine\n(backend/app/middleware/sql_masking.py)\nRole-aware column sanitization on Python dicts"]
+        TIER2 --> MASKED_ROWS["Sanitized Rows (K**** P***** / [ANONYMIZED])"]
+        MASKED_ROWS --> LLM["LLM Answer Synthesis (OpenAI GPT-OSS-120B)\nPhysically receives only sanitized rows"]
+    end
+    
+    LLM --> TIER1_OUT["Tier 1: Outbound HTTP Middleware\nFinal safety-net scrub on outgoing /chat JSON"]
+    TIER1_OUT --> UI["Clinical Chatbot UI (Frontend)"]
 ```
 
-### Protected HIPAA & PII Entity Coverage
+---
+
+### Tier 1: ASGI Transport-Layer Regex Middleware (`backend/app/middleware/hipaa_masking.py`)
+
+Registered directly into the FastAPI application lifecycle, this middleware intercepts raw HTTP byte streams at the network boundary:
 
 | PHI / PII Entity | Redaction Pattern | Substitution Token | Operational Compliance Rationale |
 |---|---|:---:|---|
@@ -176,11 +186,79 @@ flowchart LR
 | **Dates of Birth & Treatment** | `\b(DOB|Date of Birth)[\s:]+\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b` | `[DOB_REDACTED]` | 45 CFR § 164.514(b)(2)(i)(C) All elements of dates |
 | **IP Addresses & URLs** | IPv4 / IPv6 network signatures | `[IP_REDACTED]` | 45 CFR § 164.514(b)(2)(i)(O) IP addresses |
 
-### Zero-Leakage Guarantee:
-1. **Pre-Vector Search Redaction**: Incoming queries are stripped of PHI before vector embeddings are calculated by FastEmbed, preventing patient names or MRNs from ever entering the Qdrant Cloud index.
+#### Zero-Leakage Guarantee:
+1. **Pre-Vector Search Redaction**: Incoming queries are stripped of PHI before vector embeddings are calculated, preventing patient names or MRNs from ever entering the Qdrant Cloud index.
 2. **Pre-Cache Redaction**: Upstash Redis cache keys are hashed from de-identified queries, preventing patient identity from leaking into shared hospital cache tiers.
 3. **Pre-Inference Scrubbing**: Context prompts transmitted to Groq Cloud contain strictly sanitized clinical terms.
 4. **Outbound Inspection**: If an unmasked medical identifier is detected in LLM-generated output, the middleware automatically redacts it before HTTP dispatch.
+
+---
+
+### Tier 2: Relational SQL Role-Based Masking Engine (`backend/app/middleware/sql_masking.py`)
+
+While HTTP middleware scrubs text strings, the **SQL Masking Engine** operates on structured relational records returned by SQLite queries, enforcing granular **Role-Based Differential Privacy** before records are passed to the LLM:
+
+| Table | Column | Caller Role | Masking Policy | Operational & Compliance Rationale |
+| :--- | :--- | :--- | :--- | :--- |
+| `claims` | `patient_name` | `billing_executive` | **Masked**: `K**** P*****` (Initial + Asterisks) | Preserves the first initial and string length for matching against Third-Party Administrator (TPA) portals without exposing full patient identities. |
+| `claims` | `patient_name` | `admin` | **Redacted**: `[ANONYMIZED]` | Provides clean cohort figures for hospital management audits without patient identity exposure. |
+| `claims` | `patient_name` | `doctor` / `nurse` / `tech` | **Blocked by RBAC** | Completely air-gapped from clinical staff to eliminate financial bias in bedside medical treatment. |
+| `claims` | `diagnosis_code` | `billing_executive` / `admin` | **100% Authentic & Unaltered** (`N17.9`, `I21.4`, etc.) | **Crucial Anti-Dispute Guard**: Modifying or truncating ICD-10 codes causes instant insurer claim denials for lack of specificity and constitutes fraudulent clinical misrepresentation. |
+| `claims` | `claim_id` / `patient_id` / Amounts | `billing_executive` | **Full Visibility** | Essential primary keys and financial totals for resolving pending or disputed insurance claims. |
+| `maintenance_tickets` | `raised_by` | All Roles (`admin`, `tech`, `billing`) | **Masked**: `"Hospital Staff"` | Protects internal staff PII and fosters a non-punitive, blame-free culture for reporting medical device faults. |
+| `maintenance_tickets` | `fault_code` / `equipment_id` | `technician` / `admin` | **Full Visibility** | Essential engineering diagnostics needed to physically repair and calibrate hospital hardware. |
+
+#### Pre-LLM Deterministic Guarantee:
+* Column masking executes in native Python **before** row dictionaries are serialized into prompt strings.
+* The LLM (`openai/gpt-oss-120b`) physically never sees raw patient names or reporter identities in its context window.
+* Even under adversarial prompt injection or jailbreak attempts, the LLM cannot leak patient identities because it does not possess them.
+
+---
+
+### 💬 In-Chat Masking Experience & UI Verification
+
+The MediBot staff portal (`backend/app/static/index.html`) renders masked data seamlessly across all conversational workflows:
+
+#### 1. Inbound Query Scrubbing (Accidental PHI Pastes)
+When a user accidentally pastes sensitive personal data into the chatbox:
+* **User Input**: `"Patient Kavya Pillai (SSN: 123-45-6789, phone: 9876543210) needs cardiology guidelines."`
+* **Middleware Interception**: Scrubbed to `"Patient [REDACTED_PATIENT] (SSN: [REDACTED_SSN], phone: [REDACTED_PHONE]) needs cardiology guidelines."` before routing.
+* **Result**: Zero PHI enters embeddings, cache keys, or LLM generation prompts.
+
+#### 2. Chat Output for Billing Executive (`billing_executive`)
+When billing staff query analytical claims:
+* **Query**: `"List the latest nephrology claims with patient names and amounts."`
+* **Rendered Chat Response**:
+
+| # | Patient Name | Diagnosis (ICD-10) | Insurer | Claimed Amount | Status |
+|:---:|:---|:---|:---|:---|:---|
+| 1 | **K\*\*\*\* P\*\*\*\*** | `N17.9` (Acute Renal Failure) | New India Assurance | ₹72,700.00 | Pending |
+| 2 | **R\*\*\*\*\*\* K\*\*\*\*\*\*\*** | `E11.2` (Diabetic Nephropathy) | Care Health | ₹55,800.00 | Pending |
+| 3 | **V\*\*\*\*\* B\*\*\*** | `N17.9` (Acute Renal Failure) | Star Health | ₹63,300.00 | Approved |
+
+#### 3. Chat Output for Hospital Administration (`admin`)
+When an administrator queries the exact same prompt:
+* **Query**: `"List the latest nephrology claims with patient names and amounts."`
+* **Rendered Chat Response**:
+
+| # | Patient Name | Diagnosis (ICD-10) | Insurer | Claimed Amount | Status |
+|:---:|:---|:---|:---|:---|:---|
+| 1 | **[ANONYMIZED]** | `N17.9` (Acute Renal Failure) | New India Assurance | ₹72,700.00 | Pending |
+| 2 | **[ANONYMIZED]** | `E11.2` (Diabetic Nephropathy) | Care Health | ₹55,800.00 | Pending |
+| 3 | **[ANONYMIZED]** | `N17.9` (Acute Renal Failure) | Star Health | ₹63,300.00 | Approved |
+
+#### 4. Chat Output for Maintenance Tickets (All Roles)
+When querying biomedical equipment tickets:
+* **Query**: `"Show recent open maintenance tickets."`
+* **Rendered Chat Response**:
+  - Reporter Name: Displays as **`"Hospital Staff"`** (technician surname de-identified).
+  - Equipment Name (`DriveFlow IP-200`), Asset ID (`EQ-HC-8484`), and Fault Code (`F-05`) remain fully accessible for repair teams.
+
+#### 5. Cross-Role RBAC Gating
+When clinical staff (`dr.mehta` or `nurse.priya`) attempt to query financial claims:
+* **Rendered Chat Response**:
+  > ⛔ **Guardrail / RBAC Blocked**  
+  > *"As a doctor, you do not have permission to access structured billing claims data or financial schedules."*
 
 ---
 
